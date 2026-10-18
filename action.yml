@@ -1,0 +1,83 @@
+# Copyright (c) 2026 Paul Butcher. All rights reserved.
+# Released under Apache 2.0 license as described in the file LICENSE.
+
+name: Bump Lean dependencies
+description: Move a Lake package's own git requires to their latest release tags and its toolchain to the latest stable Lean, and open a pull request.
+
+inputs:
+  token:
+    description: Token for pushing the branch and opening the PR. The default GITHUB_TOKEN works, but PRs it opens do not trigger CI.
+    default: ${{ github.token }}
+  owner-pattern:
+    description: Regex matched against each require's git URL. Defaults to the repository owner's GitHub account.
+    default: ''
+  allow-rc-toolchain:
+    description: Accept a release whose lean-toolchain is a release candidate.
+    default: 'false'
+  branch:
+    description: Branch the PR is opened from.
+    default: lean-bump
+
+outputs:
+  changed:
+    description: Whether anything was updated.
+    value: ${{ steps.bump.outputs.changed }}
+  pull-request-url:
+    description: URL of the pull request, if one was opened or updated.
+    value: ${{ steps.pr.outputs.pull-request-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install elan
+      shell: bash
+      run: |
+        if ! command -v elan >/dev/null; then
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+        fi
+
+    - name: Bump
+      id: bump
+      shell: bash
+      env:
+        OWNER_PATTERN: ${{ inputs.owner-pattern || format('github\.com[/:]{0}/', github.repository_owner) }}
+        ALLOW_RC_TOOLCHAIN: ${{ inputs.allow-rc-toolchain }}
+        SUMMARY_FILE: ${{ runner.temp }}/lean-bump-summary.md
+      run: bash "$GITHUB_ACTION_PATH/bump.sh"
+
+    - name: Build and test
+      id: build
+      if: steps.bump.outputs.changed == 'true'
+      continue-on-error: true
+      shell: bash
+      run: |
+        lake build
+        if lake check-test; then lake test; fi
+
+    - name: Record build result
+      if: steps.bump.outputs.changed == 'true'
+      shell: bash
+      env:
+        OUTCOME: ${{ steps.build.outcome }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        {
+          echo
+          if [[ $OUTCOME == success ]]; then echo "Build and tests passed."
+          else echo "**Build or tests failed.** See [the run]($RUN_URL)."; fi
+        } >> "$RUNNER_TEMP/lean-bump-summary.md"
+
+    - name: Open pull request
+      id: pr
+      if: steps.bump.outputs.changed == 'true'
+      uses: peter-evans/create-pull-request@v7
+      with:
+        token: ${{ inputs.token }}
+        branch: ${{ inputs.branch }}
+        delete-branch: true
+        commit-message: 'Bump ${{ steps.bump.outputs.bumped }}'
+        title: 'Bump ${{ steps.bump.outputs.bumped }}'
+        body-path: ${{ runner.temp }}/lean-bump-summary.md
+        draft: ${{ steps.build.outcome != 'success' }}
