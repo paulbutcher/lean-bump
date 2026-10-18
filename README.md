@@ -30,15 +30,29 @@ Outputs: `changed` and `pull-request-url`.
 
 ## Releasing down the dependency graph
 
-To have a release ripple through your packages, add a step to each library's release workflow:
+To have a release ripple through your packages, add `.github/workflows/lean-bump-notify.yml` to each library:
 
 ```yaml
-- uses: paulbutcher/lean-bump/notify@v1
-  with:
-    token: ${{ secrets.LEAN_BUMP_TOKEN }}
+name: Notify dependents
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: paulbutcher/lean-bump/notify@v1
+        with:
+          token: ${{ secrets.LEAN_BUMP_TOKEN }}
 ```
 
-It sends `lean-dependency-released` to every non-archived, non-fork repository in the account with a root `lake-manifest.json`, other than the one releasing. There is no list of dependents to maintain: a repository that does not depend on the release runs a bump that finds nothing and opens no PR. Each one that does opens a PR; merging and tagging it notifies everything again, which carries the release to the next level.
+The tag patterns match the release tags the bump looks for, so prerelease tags such as `v1.2.0-rc1` notify nothing. GitHub does not start workflows for a tag pushed with `GITHUB_TOKEN`, nor for any tag when more than three are pushed at once. If a release workflow pushes the tag with `GITHUB_TOKEN`, add the `notify` step to that workflow instead, after the tag is pushed.
+
+`notify` sends `lean-dependency-released` to every non-archived, non-fork repository in the account with a root `lake-manifest.json`, other than the one releasing. There is no list of dependents to maintain: a repository that does not depend on the release runs a bump that finds nothing and opens no PR. Each one that does opens a PR; merging and tagging it notifies everything again, which carries the release to the next level.
 
 ## Bootstrap
 
