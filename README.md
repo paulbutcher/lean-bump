@@ -45,7 +45,7 @@ It sends `lean-dependency-released` to every non-archived, non-fork repository i
 To bring every package up to date at once, run the Bootstrap workflow from this repository's Actions tab (it needs the [`LEAN_BUMP_TOKEN`](#tokens) secret in this repository too, and defaults to a dry run), or locally:
 
 ```bash
-GITHUB_TOKEN=... OWNER=paulbutcher DRY_RUN=true ./bootstrap.sh
+GITHUB_TOKEN=... OWNER=... DRY_RUN=true ./bootstrap.sh
 ```
 
 Locally, `GITHUB_TOKEN` is just the variable the script reads: set it to the same token as `LEAN_BUMP_TOKEN`.
