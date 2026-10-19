@@ -13,7 +13,7 @@ For each root `require` in `lake-manifest.json` whose git URL matches `owner-pat
 
 It also moves `lean-toolchain` to the latest stable Lean release, if that is newer. A release candidate moves to its release, and a toolchain that is not a `leanprover/lean4` release, such as a nightly, is left alone.
 
-It then runs `lake update` naming only those packages, without `--keep-toolchain`, since in that mode a dependency's manifest can override the root's own pins ([lean4 issue](https://github.com/leanprover/lean4/issues/15761)). The PR description lists what was requested, anything else that changed in the manifest, and any toolchain change. If the build or tests fail, the PR is opened as a draft.
+It then runs `lake update` naming only those packages, without `--keep-toolchain`, since in that mode a dependency's manifest can override the root's own pins ([lean4 issue](https://github.com/leanprover/lean4/issues/15761)). The PR description lists what was requested, anything else that changed in the manifest, and any toolchain change. If the build or tests fail, the PR is opened as a draft. If the base branch already has the same changes by the time the PR would open, for example because an earlier bump PR was merged during the run, no PR is opened and `changed` is `false`.
 
 ## Usage
 
@@ -109,4 +109,4 @@ Every repository the bump reaches must be public, or readable with the credentia
 
 ## Testing
 
-`tests/run.sh` builds fixture repositories locally and runs `bump.sh` against them; it needs `elan`, `git`, `jq` and `perl`. `tests/github.sh` runs `notify` and `bootstrap` against a fake GitHub API.
+`tests/run.sh` builds fixture repositories locally and runs `bump.sh` and `check-base.sh` against them; it needs `elan`, `git`, `jq` and `perl`. `tests/github.sh` runs `notify` and `bootstrap` against a fake GitHub API.

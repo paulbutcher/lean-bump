@@ -124,4 +124,19 @@ toolchain_bump v99.0.0-rc2
 check "never moves the toolchain backwards" "$(cat "$T/tcapp/lean-toolchain")" leanprover/lean4:v99.0.0-rc2
 check "a toolchain ahead of the latest release is nothing to do" "$(cat "$out")" changed=false
 
+check_base() { : > "$out"; (cd "$T/clone" && GITHUB_OUTPUT=$out "${bump%/*}/check-base.sh" > "$T/log" 2>&1) \
+  || { cat "$T/log"; exit 1; }; cat "$out"; }
+git init -q -b main "$T/origin"
+echo old > "$T/origin/lean-toolchain"; g -C "$T/origin" add -A; g -C "$T/origin" commit -qm start
+git clone -q "file://$T/origin" "$T/clone"
+echo new > "$T/clone/lean-toolchain"
+check "a base branch without the bump needs a PR" "$(check_base)" changed=true
+echo new > "$T/origin/lean-toolchain"; echo other > "$T/origin/README"
+g -C "$T/origin" add -A; g -C "$T/origin" commit -qm "merged bump"
+check "a base branch that picked up the bump needs no PR" "$(check_base)" changed=false
+echo new > "$T/clone/added"
+check "a new file missing from the base branch needs a PR" "$(check_base)" changed=true
+rm "$T/clone/added"; g -C "$T/clone" checkout -q --detach
+check "a detached checkout is left to the PR step" "$(check_base)" changed=true
+
 (( failures == 0 )) || { echo "$failures failed"; exit 1; }
