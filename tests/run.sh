@@ -79,7 +79,7 @@ check "updates a branch-tracking require whose head moved" \
   "$(jq -r '.packages[] | select(.name == "«lib-c»") | .rev' "$T/app/lake-manifest.json")" "$libc_head"
 check "reports the transitive change" "$(grep -c '`shared`: v1.0.0' "$T/summary.md")" 1
 check "reports the skipped RC tag" "$(grep -c 'v0.12.0, which uses' "$T/summary.md")" 1
-check "sets the outputs" "$(cat "$out")" $'changed=true\nbumped=lib-c liba'
+check "sets the outputs" "$(cat "$out")" $'changed=true\nbumped=lib-c liba\nprojects=["."]'
 
 : > "$out"
 (cd "$T/app" && OWNER_PATTERN="^$own/" SUMMARY_FILE=$T/summary2.md GITHUB_OUTPUT=$out "$bump" > "$T/log" 2>&1)
@@ -102,6 +102,30 @@ EOF
 check "rewrites a lakefile.lean require" "$(grep -c '@ "v0.10.0"' "$T/leanapp/lakefile.lean")" 1
 check "updates the manifest for a lakefile.lean package" "$(rev_of "$T/leanapp" liba)" v0.10.0
 
+# A repository holding several projects: core requires the root by path, and apps requires core, so
+# apps sorts first but must be updated last.
+package "$T/multi" multi "liba@$own/liba@v0.1.0"
+package "$T/multi/core" core "foreign@$T/other/foreign@v1.0.0"
+printf '\n[[require]]\nname = "multi"\npath = ".."\n' >> "$T/multi/core/lakefile.toml"
+package "$T/multi/apps" apps
+printf '\n[[require]]\nname = "core"\npath = "../core"\n' >> "$T/multi/apps/lakefile.toml"
+for d in . core apps; do (cd "$T/multi/$d" && lake update >/dev/null 2>&1); done
+: > "$out"
+(cd "$T/multi" && OWNER_PATTERN="^$own/" SUMMARY_FILE=$T/summary5.md GITHUB_OUTPUT=$out "$bump" > "$T/log" 2>&1) \
+  || { cat "$T/log"; exit 1; }
+check "bumps the root project" "$(rev_of "$T/multi" liba)" v0.10.0
+check "carries the bump into a project requiring the root by path" "$(rev_of "$T/multi/core" liba)" v0.10.0
+check "carries the bump through a chain of path requires" "$(rev_of "$T/multi/apps" liba)" v0.10.0
+check "carries transitive changes along" "$(rev_of "$T/multi/apps" shared)" v1.1.0
+check "leaves a sub-project's other requires alone" "$(rev_of "$T/multi/core" foreign)" v1.0.0
+check "names only requested packages and lists every project" "$(cat "$out")" \
+  $'changed=true\nbumped=liba\nprojects=[".","core","apps"]'
+check "reports each project" "$(grep '^## ' "$T/summary5.md" | paste -sd';')" '## Root package;## `core/`;## `apps/`'
+check "reports a carried bump as not requested" "$(sed -n '/`core\/`/,/`apps\/`/p' "$T/summary5.md" | grep -c Requested)" 0
+: > "$out"
+(cd "$T/multi" && OWNER_PATTERN="^$own/" SUMMARY_FILE=$T/summary6.md GITHUB_OUTPUT=$out "$bump" > "$T/log" 2>&1)
+check "a second multi-project run finds nothing to do" "$(cat "$out")" changed=false
+
 # No requires to bump, so lake never runs and the old toolchains need not be installed.
 toolchain_bump() { # starting toolchain
   rm -rf "$T/tcapp"; mkdir "$T/tcapp"
@@ -115,7 +139,7 @@ toolchain_bump() { # starting toolchain
 }
 toolchain_bump v4.0.0
 check "bumps the toolchain to the latest stable release" "$(cat "$T/tcapp/lean-toolchain")" "$TC"
-check "names the toolchain in the outputs" "$(cat "$out")" $'changed=true\nbumped=lean-toolchain'
+check "names the toolchain in the outputs" "$(cat "$out")" $'changed=true\nbumped=lean-toolchain\nprojects=["."]'
 check "reports the toolchain change" "$(grep -c "v4.0.0\` → \`$TC" "$T/summary4.md")" 1
 check "omits an empty requested section" "$(grep -c Requested "$T/summary4.md")" 0
 toolchain_bump "${TC#*:}-rc1"

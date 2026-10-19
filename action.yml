@@ -52,9 +52,17 @@ runs:
       if: steps.bump.outputs.changed == 'true'
       continue-on-error: true
       shell: bash
+      env:
+        PROJECTS: ${{ steps.bump.outputs.projects }}
       run: |
-        lake build
-        if lake check-test; then lake test; fi
+        mapfile -t projects < <(jq -r '.[]' <<< "$PROJECTS")
+        status=0
+        for p in "${projects[@]}"; do
+          echo "::group::$p"
+          (cd "$p" && lake build && if lake check-test; then lake test; fi) || status=1
+          echo "::endgroup::"
+        done
+        exit "$status"
 
     - name: Record build result
       if: steps.bump.outputs.changed == 'true'
