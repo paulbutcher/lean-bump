@@ -78,7 +78,7 @@ runs:
     - name: Open pull request
       id: pr
       if: steps.base.outputs.changed == 'true'
-      uses: peter-evans/create-pull-request@v7
+      uses: peter-evans/create-pull-request@v8
       with:
         token: ${{ inputs.token }}
         branch: ${{ inputs.branch }}

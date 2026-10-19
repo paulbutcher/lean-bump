@@ -15,7 +15,7 @@ jobs:
   bootstrap:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: ./bootstrap.sh
         env:
           GITHUB_TOKEN: ${{ secrets.LEAN_BUMP_TOKEN }}
