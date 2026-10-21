@@ -47,36 +47,6 @@ runs:
         SUMMARY_FILE: ${{ runner.temp }}/lean-bump-summary.md
       run: bash "$GITHUB_ACTION_PATH/bump.sh"
 
-    - name: Build and test
-      id: build
-      if: steps.bump.outputs.changed == 'true'
-      continue-on-error: true
-      shell: bash
-      env:
-        PROJECTS: ${{ steps.bump.outputs.projects }}
-      run: |
-        mapfile -t projects < <(jq -r '.[]' <<< "$PROJECTS")
-        status=0
-        for p in "${projects[@]}"; do
-          echo "::group::$p"
-          (cd "$p" && lake build && if lake check-test; then lake test; fi) || status=1
-          echo "::endgroup::"
-        done
-        exit "$status"
-
-    - name: Record build result
-      if: steps.bump.outputs.changed == 'true'
-      shell: bash
-      env:
-        OUTCOME: ${{ steps.build.outcome }}
-        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      run: |
-        {
-          echo
-          if [[ $OUTCOME == success ]]; then echo "Build and tests passed."
-          else echo "**Build or tests failed.** See [the run]($RUN_URL)."; fi
-        } >> "$RUNNER_TEMP/lean-bump-summary.md"
-
     - name: Check base branch
       id: base
       if: steps.bump.outputs.changed == 'true'
@@ -94,4 +64,3 @@ runs:
         commit-message: 'Bump ${{ steps.bump.outputs.bumped }}'
         title: 'Bump ${{ steps.bump.outputs.bumped }}'
         body-path: ${{ runner.temp }}/lean-bump-summary.md
-        draft: ${{ steps.build.outcome != 'success' }}

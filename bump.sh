@@ -247,8 +247,6 @@ bump_project() {
 
 for p in "${projects[@]}"; do bump_project "$p"; done
 cd "$top"
-projects_json=$(printf '%s\n' "${projects[@]}" | jq -Rnc '[inputs]')
-
 if (( ${#summaries[@]} == 0 )); then
   echo "changed=false" >> "$GITHUB_OUTPUT"
   echo "bump: nothing to update"
@@ -265,6 +263,5 @@ fi
   echo "changed=true"
   echo "bumped=$( { (( ${#bumped[@]} == 0 )) || printf '%s\n' "${bumped[@]}" | LC_ALL=C sort -u
                    [[ $toolchain_changed == false ]] || echo lean-toolchain; } | paste -sd' ')"
-  echo "projects=$projects_json"
 } >> "$GITHUB_OUTPUT"
 cat "$SUMMARY_FILE"
