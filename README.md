@@ -81,7 +81,7 @@ Two tokens are involved:
 | `notify` | `LEAN_BUMP_TOKEN` | Sends events to the account's other repositories. |
 | `bootstrap` | `LEAN_BUMP_TOKEN` | Adds a workflow file and opens a PR in each of the account's other repositories. |
 
-`notify` makes one API call per repository in the account, well inside the authenticated rate limit.
+`notify` finds the account's Lake packages with one GraphQL query per 100 repositories, then sends the events a second apart. Each event starts a bump run on the same token, so if GitHub still reports a rate limit, `notify` and `bootstrap` wait as long as it asks and retry, up to four times.
 
 ### Creating `LEAN_BUMP_TOKEN`
 

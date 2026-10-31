@@ -11,7 +11,7 @@ EVENT_TYPE=${EVENT_TYPE:-lean-dependency-released}
 DRY_RUN=${DRY_RUN:-false}
 
 find_lake_repos "$OWNER"
-status=$LAKE_REPOS_FAILED
+status=0
 for repo in "${LAKE_REPOS[@]}"; do
   [[ $repo != "$SOURCE" ]] || continue
   if [[ $DRY_RUN == true ]]; then echo "would notify $repo"

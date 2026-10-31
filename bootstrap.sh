@@ -39,7 +39,7 @@ install() {
 }
 
 find_lake_repos "$OWNER"
-status=$LAKE_REPOS_FAILED
+status=0
 for repo in "${LAKE_REPOS[@]}"; do
   code=$(api GET "repos/$repo/contents/$workflow")
   case $code in
