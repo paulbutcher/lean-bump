@@ -81,7 +81,7 @@ Two tokens are involved:
 | `notify` | `LEAN_BUMP_TOKEN` | Sends events to the account's other repositories. |
 | `bootstrap` | `LEAN_BUMP_TOKEN` | Adds a workflow file and opens a PR in each of the account's other repositories. |
 
-`notify` finds the account's Lake packages with one GraphQL query per 100 repositories, then sends the events a second apart. Each event starts a bump run on the same token, so if GitHub still reports a rate limit, `notify` and `bootstrap` wait as long as it asks and retry, up to four times.
+`notify` finds the account's Lake packages with one GraphQL query per 100 repositories, then sends the events a second apart. Each event starts a bump run on the same token, so if GitHub still reports a rate limit, `notify` and `bootstrap` wait as long as it asks and retry, up to four times. A search or other read that hits a transient server error (HTTP 502, 503 or 504) is retried the same way, after 5, 10, 20 and 40 seconds; a write is not, because it may already have taken effect.
 
 ### Creating `LEAN_BUMP_TOKEN`
 

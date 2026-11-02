@@ -120,6 +120,16 @@ check "a refused dispatch reports GitHub's message" "$(grep '^could not' <<< "$o
   "could not notify o/new (HTTP 403): Resource not accessible by personal access token"
 rm "$T/api/POST:repos%o%new%dispatches"
 
+fixture 'POST/graphql!' 502 '<html>502 Bad Gateway</html>'
+out=$(run env SOURCE=o/done "$root/notify/notify.sh") && status=0 || status=$?
+check "a search that hits a gateway error is retried" "$status;$(sleeps);$(writes)" \
+  "0;5 1 1;POST repos/o/new/dispatches;POST repos/o/pending/dispatches"
+
+fixture 'POST/repos/o/new/dispatches!' 502
+out=$(run env SOURCE=o/done "$root/notify/notify.sh") && status=0 || status=$?
+check "a dispatch that hits a gateway error is not retried" "$status;$(sleeps);$(writes)" \
+  "1;1 1;POST repos/o/new/dispatches;POST repos/o/pending/dispatches"
+
 fixture POST/graphql 200 '{"errors": [{"message": "boom"}]}'
 out=$(run "$root/notify/notify.sh") && status=0 || status=$?
 check "a failed search fails the run" "$status;$(writes)" "1;"

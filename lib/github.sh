@@ -28,17 +28,23 @@ rate_limit_wait() {
 
 # api METHOD PATH [JSON]: prints the HTTP status and leaves the response body in $body_file.
 # Writes are spaced a second apart, and a rate-limited request is retried after the wait GitHub
-# asks for, up to four times.
+# asks for, up to four times. So is a read that hits a transient server error; a write is not,
+# since it may have taken effect.
 api() {
   local args=(-sS -o "$body_file" -D "$header_file" -w '%{http_code}' -X "$1" -H "Accept: application/vnd.github+json")
-  local code attempt wait
+  local code attempt wait read=false
   [[ -n ${GITHUB_TOKEN:-} ]] && args+=(-H "Authorization: Bearer $GITHUB_TOKEN")
   (( $# >= 3 )) && args+=(-d "$3")
-  [[ $1 == GET || $2 == graphql ]] || sleep 1
+  [[ $1 == GET || $2 == graphql ]] && read=true || sleep 1
   for attempt in 0 1 2 3 4; do
     code=$(curl "${args[@]}" "$API/$2")
-    (( attempt < 4 )) && wait=$(rate_limit_wait "$code" "$attempt") || break
-    echo "rate limited on $1 $2 (HTTP $code), retrying in ${wait}s" >&2
+    if (( attempt == 4 )); then break
+    elif wait=$(rate_limit_wait "$code" "$attempt"); then
+      echo "rate limited on $1 $2 (HTTP $code), retrying in ${wait}s" >&2
+    elif [[ $read == true && $code == 50[234] ]]; then
+      wait=$(( 5 << attempt ))
+      echo "server error on $1 $2 (HTTP $code), retrying in ${wait}s" >&2
+    else break; fi
     sleep "$wait"
   done
   printf '%s' "$code"
