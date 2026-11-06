@@ -61,7 +61,8 @@ installed() {
     "$(jq -cn --arg c "$(base64 < "${3:-$root/templates/$2}")" '{content: $c, sha: "blob"}')"
 }
 for w in lean-bump.yml lean-bump-resolve.yml lean_bump_notify.yml; do installed o/done "$w"; done
-fixture GET/repos/o/pending/git/ref/heads/lean-bump-install 200
+for r in done new; do fixture "GET/repos/o/$r/pulls?head=o:lean-bump-install&state=open" 200 '[]'; done
+fixture 'GET/repos/o/pending/pulls?head=o:lean-bump-install&state=open' 200 '[{"number": 1}]'
 fixture GET/repos/o/new 200 '{"default_branch": "main"}'
 fixture GET/repos/o/new/git/ref/heads/main 200 '{"object": {"sha": "abc123"}}'
 
@@ -107,10 +108,14 @@ installed o/done lean_bump_notify.yml "$T/old.yml"
 rm "$T/api/GET:repos%o%done%contents%.github%workflows%lean-bump-resolve.yml"
 fixture GET/repos/o/done 200 '{"default_branch": "main"}'
 fixture GET/repos/o/done/git/ref/heads/main 200 '{"object": {"sha": "def456"}}'
+# Left behind by an earlier install PR, merged without deleting it.
+fixture GET/repos/o/done/git/ref/heads/lean-bump-install 200
+fixture DELETE/repos/o/done/git/refs/heads/lean-bump-install 204
 out=$(run "$root/bootstrap.sh")
+check "bootstrap replaces an install branch left behind by a merged PR" "$(grep -c "^install PR pending for o/done" <<< "$out")" 0
 check "bootstrap updates outdated workflows and adds missing ones, notify included" \
   "$(writes | tr ';' '\n' | grep o/done | paste -sd';')" \
-  "POST repos/o/done/dispatches;POST repos/o/done/git/refs;PUT repos/o/done/contents/.github/workflows/lean-bump.yml;PUT repos/o/done/contents/.github/workflows/lean-bump-resolve.yml;PUT repos/o/done/contents/.github/workflows/lean_bump_notify.yml;POST repos/o/done/pulls"
+  "POST repos/o/done/dispatches;DELETE repos/o/done/git/refs/heads/lean-bump-install;POST repos/o/done/git/refs;PUT repos/o/done/contents/.github/workflows/lean-bump.yml;PUT repos/o/done/contents/.github/workflows/lean-bump-resolve.yml;PUT repos/o/done/contents/.github/workflows/lean_bump_notify.yml;POST repos/o/done/pulls"
 check "an updated workflow replaces the blob it read, and an added one has none" \
   "$(grep '^PUT repos/o/done/' "$T/api/requests" | cut -d' ' -f3- | jq -c '[.message, .sha]' | paste -sd' ')" \
   '["Update lean-bump.yml","blob"] ["Add lean-bump-resolve.yml",null] ["Update lean_bump_notify.yml","blob"]'

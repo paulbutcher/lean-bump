@@ -32,9 +32,17 @@ stale() {
 # install REPO STALE: opens one PR adding or updating every workflow in STALE.
 install() {
   local repo=$1 stale=$2 code base sha name blob
-  code=$(api GET "repos/$repo/git/ref/heads/$branch")
-  if [[ $code == 200 ]]; then echo "install PR pending for $repo"; return; fi
+  code=$(api GET "repos/$repo/pulls?head=${repo%%/*}:$branch&state=open")
+  [[ $code == 200 ]] || { echo "could not list PRs in $repo (HTTP $code)" >&2; return 1; }
+  if jq -e 'length > 0' "$body_file" > /dev/null; then echo "install PR pending for $repo"; return; fi
   if [[ $DRY_RUN == true ]]; then echo "would open install PR for $repo:" $(cut -d' ' -f1 <<< "$stale"); return; fi
+
+  # A branch left behind by an install PR that was merged or closed without deleting it.
+  code=$(api GET "repos/$repo/git/ref/heads/$branch")
+  if [[ $code == 200 ]]; then
+    code=$(api DELETE "repos/$repo/git/refs/heads/$branch")
+    [[ $code == 204 ]] || { echo "could not delete the old $branch in $repo (HTTP $code)" >&2; return 1; }
+  fi
 
   code=$(api GET "repos/$repo")
   [[ $code == 200 ]] || { echo "could not read $repo (HTTP $code)" >&2; return 1; }
