@@ -58,11 +58,17 @@ fi
 ! grep -q '^\.github/' <<< "$changed" || die "the agent changed files under .github/: $(grep '^\.github/' <<< "$changed")"
 if [[ $outcome == changelog ]]; then
   grep -qx CHANGELOG.md <<< "$changed" || die "a changelog result left CHANGELOG.md unchanged"
-  others=$(grep -vx -e CHANGELOG.md -e lakefile.lean -e lakefile.toml <<< "$changed" || true)
-  [[ -z $others ]] || die "a changelog result changed more than CHANGELOG.md and the lakefile: $others"
-  # In the lakefile, only the version line may change.
-  lines=$(git diff --cached -U0 -- lakefile.lean lakefile.toml | grep -E '^[-+]' | grep -Ev '^(---|\+\+\+) ' || true)
-  [[ -z $lines ]] || ! grep -qv version <<< "$lines" || die "a changelog result changed more of the lakefile than its version: $lines"
+  new=$(sed -nE 's/^## \[([0-9]+\.[0-9]+\.[0-9]+)\].*/\1/p' CHANGELOG.md | head -n1)
+  [[ -n $new ]] || die "CHANGELOG.md has no entry with a version"
+  old=$(git tag -l | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)
+  old=${old#v}
+  # Elsewhere, a release only moves the version wherever the package declares it, such as the
+  # lakefile or a constant reported at run time: each line removed holds the old version, and
+  # each line added the new one.
+  lines=$(git diff --cached -U0 -- . ':!CHANGELOG.md' | grep -E '^[-+]' \
+            | grep -Ev '^(--- (a/|/dev/null)|\+\+\+ (b/|/dev/null))' || true)
+  others=$(awk -v o="$old" -v n="$new" '(/^-/ && (o == "" || !index($0, o))) || (/^\+/ && !index($0, n))' <<< "$lines")
+  [[ -z $others ]] || die "a changelog result changed more than the version outside CHANGELOG.md: $others"
 fi
 
 if [[ $DRY_RUN == true ]]; then

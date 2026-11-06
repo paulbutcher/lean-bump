@@ -27,7 +27,7 @@ Changes confined to proofs, private declarations, tests and documentation are no
 
 ## Release changes
 
-A release changes `CHANGELOG.md` and, if the lakefile (`lakefile.lean` or `lakefile.toml`) declares the package's `version`, that line, set to the new version. Nothing else.
+A release adds an entry to `CHANGELOG.md` and sets every declaration of the package's version to the new one: the lakefile's `version`, if it has one, and any other place the package or its documents say holds it, such as a constant reported at run time. Nothing else: outside the changelog, each line changed must replace the old version with the new.
 
 ## Changelog
 
