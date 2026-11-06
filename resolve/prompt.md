@@ -20,6 +20,8 @@ Do not commit, push, merge, tag, or comment on the PR. Leave your changes in the
 4. If it is mechanical, make it, and run every step of the CI workflow locally until all of them pass. Do not stop at a partial fix: if what is left needs a decision, revert your changes and treat the whole PR as needing one.
 5. If it needs a decision, change nothing.
 
+If a CI step cannot be run because the command is not allowed, do not report the fix as `fixed`. Report `needs-decision`, and say in the comment which commands were refused and the rules to add to the repository's `LEAN_BUMP_ADDITIONAL_TOOLS` variable, such as `Bash(./scripts/check-imports.sh:*)`.
+
 If the failure has nothing to do with the bump, such as a flaky test, a network error, or a base branch that was already broken, treat it as needing a decision and say what you found.
 
 ## If CI passed
