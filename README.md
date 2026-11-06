@@ -32,25 +32,7 @@ Outputs: `changed` and `pull-request-url`.
 
 ## Releasing down the dependency graph
 
-To have a release ripple through your packages, add `.github/workflows/lean-bump-notify.yml` to each library:
-
-```yaml
-name: Notify dependents
-
-on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-      - '[0-9]+.[0-9]+.[0-9]+'
-
-jobs:
-  notify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: paulbutcher/lean-bump/notify@v1
-        with:
-          token: ${{ secrets.LEAN_BUMP_TOKEN }}
-```
+To have a release ripple through your packages, add [templates/lean_bump_notify.yml](templates/lean_bump_notify.yml) to each library as `.github/workflows/lean_bump_notify.yml`. [Bootstrap](#bootstrap) keeps it up to date once it is there, but does not add it, since only a library needs it.
 
 The tag patterns match the release tags the bump looks for, so prerelease tags such as `v1.2.0-rc1` notify nothing. GitHub does not start workflows for a tag pushed with `GITHUB_TOKEN`, nor for any tag when more than three are pushed at once. If a release workflow pushes the tag with `GITHUB_TOKEN`, add the `notify` step to that workflow instead, after the tag is pushed.
 
@@ -66,7 +48,7 @@ GITHUB_TOKEN=... OWNER=... DRY_RUN=true ./bootstrap.sh
 
 Locally, `GITHUB_TOKEN` is just the variable the script reads: set it to the same token as `LEAN_BUMP_TOKEN`.
 
-For each Lake package in the account, it triggers the bump workflow if the package has `.github/workflows/lean-bump.yml`, and otherwise opens a PR adding it. Run it again after merging those PRs to trigger the newly installed workflows. It is safe to rerun: a package whose install PR is still open is skipped. Each round brings packages up to date with what is released now, so a change several levels down still needs a release at each level, which `notify` then carries onwards.
+For each Lake package in the account, it triggers the bump workflow if the package has `.github/workflows/lean-bump.yml`. It also opens a PR that adds the bump and resolve workflows where they are missing, and brings every workflow from [templates](templates) that the package has up to date, notify included. Run it again after merging those PRs to trigger the newly installed workflows. It is safe to rerun: a package whose install PR is still open is skipped, and one whose workflows all match their templates gets no PR. Each round brings packages up to date with what is released now, so a change several levels down still needs a release at each level, which `notify` then carries onwards.
 
 ## Tokens
 

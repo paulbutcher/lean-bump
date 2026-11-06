@@ -55,7 +55,12 @@ search() {
 repo() { jq -cn --arg r "$1" --argjson lake "$2" '{nameWithOwner: $r, manifest: (if $lake then {__typename: "Blob"} else null end)}'; }
 account=$(search "[$(repo o/done true), $(repo o/new true), $(repo o/pending true), $(repo o/other false)]")
 fixture POST/graphql 200 "$account"
-fixture GET/repos/o/done/contents/.github/workflows/lean-bump.yml 200
+# installed REPO NAME [FILE]: REPO has workflow NAME on its default branch, a copy of FILE or else of its template.
+installed() {
+  fixture "GET/repos/$1/contents/.github/workflows/$2" 200 \
+    "$(jq -cn --arg c "$(base64 < "${3:-$root/templates/$2}")" '{content: $c, sha: "blob"}')"
+}
+for w in lean-bump.yml lean-bump-resolve.yml lean_bump_notify.yml; do installed o/done "$w"; done
 fixture GET/repos/o/pending/git/ref/heads/lean-bump-install 200
 fixture GET/repos/o/new 200 '{"default_branch": "main"}'
 fixture GET/repos/o/new/git/ref/heads/main 200 '{"object": {"sha": "abc123"}}'
@@ -79,17 +84,37 @@ check "notify spaces dispatches a second apart" "$(sleeps)" "1 1"
 out=$(run env DRY_RUN=true "$root/bootstrap.sh")
 check "a bootstrap dry run writes nothing" "$(writes)" ""
 check "a bootstrap dry run reports the plan" "$out" \
-  $'would notify o/done\nwould open install PR for o/new\ninstall PR pending for o/pending'
+  $'would notify o/done\nwould open install PR for o/new: lean-bump.yml lean-bump-resolve.yml\ninstall PR pending for o/pending'
 
 out=$(run "$root/bootstrap.sh")
-check "bootstrap notifies installed packages and installs the workflow elsewhere" "$(writes)" \
-  "POST repos/o/done/dispatches;POST repos/o/new/git/refs;PUT repos/o/new/contents/.github/workflows/lean-bump.yml;POST repos/o/new/pulls"
+check "bootstrap notifies installed packages and installs the workflows elsewhere" "$(writes)" \
+  "POST repos/o/done/dispatches;POST repos/o/new/git/refs;PUT repos/o/new/contents/.github/workflows/lean-bump.yml;PUT repos/o/new/contents/.github/workflows/lean-bump-resolve.yml;POST repos/o/new/pulls"
 check "the install branch starts at the default branch head" \
   "$(grep '^POST repos/o/new/git/refs' "$T/api/requests" | cut -d' ' -f3- | jq -c .)" \
   '{"ref":"refs/heads/lean-bump-install","sha":"abc123"}'
-check "the installed workflow is the template" \
-  "$(grep '^PUT ' "$T/api/requests" | cut -d' ' -f3- | jq -r .content | base64 -d)" \
-  "$(cat "$root/templates/lean-bump.yml")"
+for w in lean-bump.yml lean-bump-resolve.yml; do
+  check "the installed $w is the template" \
+    "$(grep "^PUT repos/o/new/contents/.github/workflows/$w " "$T/api/requests" | cut -d' ' -f3- | jq -r .content | base64 -d)" \
+    "$(cat "$root/templates/$w")"
+done
+check "the install PR lists the workflows" \
+  "$(grep '^POST repos/o/new/pulls' "$T/api/requests" | cut -d' ' -f3- | jq -r .body | tail -n2)" \
+  $'- `lean-bump.yml`\n- `lean-bump-resolve.yml`'
+
+printf 'old\n' > "$T/old.yml"
+installed o/done lean-bump.yml "$T/old.yml"
+installed o/done lean_bump_notify.yml "$T/old.yml"
+rm "$T/api/GET:repos%o%done%contents%.github%workflows%lean-bump-resolve.yml"
+fixture GET/repos/o/done 200 '{"default_branch": "main"}'
+fixture GET/repos/o/done/git/ref/heads/main 200 '{"object": {"sha": "def456"}}'
+out=$(run "$root/bootstrap.sh")
+check "bootstrap updates outdated workflows and adds missing ones, notify included" \
+  "$(writes | tr ';' '\n' | grep o/done | paste -sd';')" \
+  "POST repos/o/done/dispatches;POST repos/o/done/git/refs;PUT repos/o/done/contents/.github/workflows/lean-bump.yml;PUT repos/o/done/contents/.github/workflows/lean-bump-resolve.yml;PUT repos/o/done/contents/.github/workflows/lean_bump_notify.yml;POST repos/o/done/pulls"
+check "an updated workflow replaces the blob it read, and an added one has none" \
+  "$(grep '^PUT repos/o/done/' "$T/api/requests" | cut -d' ' -f3- | jq -c '[.message, .sha]' | paste -sd' ')" \
+  '["Update lean-bump.yml","blob"] ["Add lean-bump-resolve.yml",null] ["Update lean_bump_notify.yml","blob"]'
+for w in lean-bump.yml lean-bump-resolve.yml lean_bump_notify.yml; do installed o/done "$w"; done
 
 fixture POST/graphql 200 "$(search "$(jq -cn '[range(100) | {nameWithOwner: "o/r\(.)", manifest: null}]')" c2)"
 fixture POST/graphql@c2 200 "$(search "[$(repo o/last true)]")"

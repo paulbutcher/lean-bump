@@ -24,8 +24,11 @@ inputs:
     description: Version of the @anthropic-ai/claude-code package to install.
     default: latest
   allowed-tools:
-    description: Tools Claude Code may use without asking. Add the commands a package's CI workflow runs beyond lake and git.
+    description: Tools Claude Code may use without asking.
     default: Read Edit Write Glob Grep Bash(lake:*) Bash(git:*)
+  additional-tools:
+    description: Tools allowed as well as allowed-tools, such as the scripts a package's CI workflow runs, for example `Bash(./scripts/check-imports.sh:*)`.
+    default: ''
   branch:
     description: Branch the bump PR is opened from.
     default: lean-bump
@@ -102,7 +105,7 @@ runs:
         BASE: ${{ steps.guard.outputs.base }}
         BRANCH: ${{ inputs.branch }}
         MODEL: ${{ inputs.model }}
-        ALLOWED_TOOLS: ${{ inputs.allowed-tools }}
+        ALLOWED_TOOLS: ${{ inputs.allowed-tools }} ${{ inputs.additional-tools }}
         CONTEXT_DIR: ${{ runner.temp }}/lean-bump-resolve
       run: bash "$GITHUB_ACTION_PATH/run.sh"
 
