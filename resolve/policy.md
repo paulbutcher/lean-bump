@@ -31,10 +31,9 @@ A release changes `CHANGELOG.md` and, if the lakefile (`lakefile.lean` or `lakef
 
 ## Changelog
 
-`CHANGELOG.md` lists releases newest first under `# Changelog`. Each entry has a heading `## [x.y.z] - YYYY-MM-DD`, with the date the entry is written in UTC, followed by one bullet per change, written for someone who uses the package:
+`CHANGELOG.md` lists releases newest first under `# Changelog`. Each entry has a heading `## [x.y.z] - YYYY-MM-DD`, with the date the entry is written in UTC, followed by one bullet per change, written for someone who uses the package.
 
-- prefix each breaking change with `Breaking:`, and say what to use in its place;
-- a release whose only change is the bump itself is `* Chore: bump dependencies`, followed by a bullet for a toolchain change, if any.
+Prefix each breaking change with `Breaking:`, and say what to use in its place.
 
 Match the wording and level of detail of the entries already there.
 
