@@ -1,0 +1,145 @@
+# Copyright (c) 2026 Paul Butcher. All rights reserved.
+# Released under Apache 2.0 license as described in the file LICENSE.
+
+name: Resolve lean-bump pull request
+description: When CI finishes on a lean-bump PR, fix the build or explain the decision it needs, then merge and release.
+
+inputs:
+  app-id:
+    description: ID of the GitHub App that pushes, comments, merges and tags.
+    required: true
+  private-key:
+    description: Private key of the GitHub App.
+    required: true
+  anthropic-api-key:
+    description: Anthropic API key for Claude Code. Give this or claude-code-oauth-token.
+    default: ''
+  claude-code-oauth-token:
+    description: Claude Code OAuth token, from `claude setup-token`. Give this or anthropic-api-key.
+    default: ''
+  model:
+    description: Model Claude Code uses. Defaults to Claude Code's own default.
+    default: ''
+  claude-version:
+    description: Version of the @anthropic-ai/claude-code package to install.
+    default: latest
+  allowed-tools:
+    description: Tools Claude Code may use without asking. Add the commands a package's CI workflow runs beyond lake and git.
+    default: Read Edit Write Glob Grep Bash(lake:*) Bash(git:*)
+  branch:
+    description: Branch the bump PR is opened from.
+    default: lean-bump
+  max-attempts:
+    description: Fixes to push before handing the PR to a person.
+    default: '3'
+  merge-method:
+    description: How to merge the PR, one of merge, squash or rebase.
+    default: merge
+  dry-run:
+    description: Comment with what would be done instead of pushing, labelling, merging or tagging.
+    default: 'false'
+
+outputs:
+  action:
+    description: What resolve did, one of skip, fix, give-up, changelog, release or merge.
+    value: ${{ steps.guard.outputs.action }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v7
+      if: github.event.workflow_run.head_branch == inputs.branch
+      with:
+        ref: ${{ github.event.workflow_run.head_sha }}
+        fetch-depth: 0
+        # The agent runs in this checkout and must not find a token in it.
+        persist-credentials: false
+
+    - name: Decide
+      id: guard
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        OWNER: ${{ github.repository_owner }}
+        RUN_ID: ${{ github.event.workflow_run.id }}
+        HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+        HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        BRANCH: ${{ inputs.branch }}
+        MAX_ATTEMPTS: ${{ inputs.max-attempts }}
+        CONTEXT_DIR: ${{ runner.temp }}/lean-bump-resolve
+      run: |
+        mkdir -p "$CONTEXT_DIR"
+        bash "$GITHUB_ACTION_PATH/guard.sh"
+
+    - name: Install elan
+      if: steps.guard.outputs.action == 'fix' || steps.guard.outputs.action == 'changelog'
+      shell: bash
+      run: |
+        if ! command -v elan >/dev/null; then
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+        fi
+
+    - name: Install Claude Code
+      if: steps.guard.outputs.action == 'fix' || steps.guard.outputs.action == 'changelog'
+      shell: bash
+      run: npm install -g "@anthropic-ai/claude-code@${{ inputs.claude-version }}"
+
+    # No GitHub token is passed to the agent: whatever it does, it cannot push or comment.
+    - name: Run the agent
+      if: steps.guard.outputs.action == 'fix' || steps.guard.outputs.action == 'changelog'
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        ACTION: ${{ steps.guard.outputs.action }}
+        REPO: ${{ github.repository }}
+        PR: ${{ steps.guard.outputs.pr }}
+        BASE: ${{ steps.guard.outputs.base }}
+        BRANCH: ${{ inputs.branch }}
+        MODEL: ${{ inputs.model }}
+        ALLOWED_TOOLS: ${{ inputs.allowed-tools }}
+        CONTEXT_DIR: ${{ runner.temp }}/lean-bump-resolve
+      run: bash "$GITHUB_ACTION_PATH/run.sh"
+
+    - name: Get the App's token
+      id: app
+      if: steps.guard.outputs.action != 'skip'
+      uses: actions/create-github-app-token@v2
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+
+    - name: Push, label and comment
+      if: steps.guard.outputs.action == 'fix' || steps.guard.outputs.action == 'changelog' || steps.guard.outputs.action == 'give-up'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+        APP_SLUG: ${{ steps.app.outputs.app-slug }}
+        ACTION: ${{ steps.guard.outputs.action }}
+        ATTEMPTS: ${{ steps.guard.outputs.attempts }}
+        REPO: ${{ github.repository }}
+        RUN_ID: ${{ github.event.workflow_run.id }}
+        PR: ${{ steps.guard.outputs.pr }}
+        HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        BRANCH: ${{ inputs.branch }}
+        DRY_RUN: ${{ inputs.dry-run }}
+        CONTEXT_DIR: ${{ runner.temp }}/lean-bump-resolve
+      run: bash "$GITHUB_ACTION_PATH/apply.sh"
+
+    - name: Merge and release
+      if: steps.guard.outputs.action == 'merge' || steps.guard.outputs.action == 'release'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+        ACTION: ${{ steps.guard.outputs.action }}
+        REPO: ${{ github.repository }}
+        PR: ${{ steps.guard.outputs.pr }}
+        HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        MERGE_METHOD: ${{ inputs.merge-method }}
+        DRY_RUN: ${{ inputs.dry-run }}
+      run: bash "$GITHUB_ACTION_PATH/release.sh"
