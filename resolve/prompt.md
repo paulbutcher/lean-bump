@@ -30,7 +30,7 @@ This happens only for a library whose PR has no changelog entry yet.
 
 1. Find the latest release tag and read the full diff of the PR against its base, including any fixes already pushed to it.
 2. Decide, by the policy, whether the release is breaking, and so the next version. If a dependency moved, read its changelog to see whether that release was breaking.
-3. Add the entry for that version to `CHANGELOG.md`.
+3. Add the entry for that version to `CHANGELOG.md`, and if the lakefile declares a `version`, set it to the same version. Change nothing else.
 
 ## Result
 

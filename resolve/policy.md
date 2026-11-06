@@ -25,6 +25,10 @@ A change is breaking if code that builds against the previous release could fail
 
 Changes confined to proofs, private declarations, tests and documentation are not breaking.
 
+## Release changes
+
+A release changes `CHANGELOG.md` and, if the lakefile (`lakefile.lean` or `lakefile.toml`) declares the package's `version`, that line, set to the new version. Nothing else.
+
 ## Changelog
 
 `CHANGELOG.md` lists releases newest first under `# Changelog`. Each entry has a heading `## [x.y.z] - YYYY-MM-DD`, with the date the entry is written in UTC, followed by one bullet per change, written for someone who uses the package:

@@ -56,7 +56,14 @@ fi
 [[ -n $changed ]] || die "the agent reported $outcome but changed nothing"
 [[ -n $message ]] || die "the result has no commit message"
 ! grep -q '^\.github/' <<< "$changed" || die "the agent changed files under .github/: $(grep '^\.github/' <<< "$changed")"
-[[ $outcome != changelog || $changed == CHANGELOG.md ]] || die "a changelog result changed more than CHANGELOG.md: $changed"
+if [[ $outcome == changelog ]]; then
+  grep -qx CHANGELOG.md <<< "$changed" || die "a changelog result left CHANGELOG.md unchanged"
+  others=$(grep -vx -e CHANGELOG.md -e lakefile.lean -e lakefile.toml <<< "$changed" || true)
+  [[ -z $others ]] || die "a changelog result changed more than CHANGELOG.md and the lakefile: $others"
+  # In the lakefile, only the version line may change.
+  lines=$(git diff --cached -U0 -- lakefile.lean lakefile.toml | grep -E '^[-+]' | grep -Ev '^(---|\+\+\+) ' || true)
+  [[ -z $lines ]] || ! grep -qv version <<< "$lines" || die "a changelog result changed more of the lakefile than its version: $lines"
+fi
 
 if [[ $DRY_RUN == true ]]; then
   # A comment holds at most 65536 characters.
