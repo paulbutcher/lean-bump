@@ -50,6 +50,16 @@ Locally, `GITHUB_TOKEN` is just the variable the script reads: set it to the sam
 
 For each Lake package in the account, it triggers the bump workflow if the package has `.github/workflows/lean-bump.yml`. It also opens a PR that adds the bump and resolve workflows where they are missing, and brings every workflow from [templates](templates) that the package has up to date, notify included. Run it again after merging those PRs to trigger the newly installed workflows. It is safe to rerun: a package whose install PR is still open is skipped, and one whose workflows all match their templates gets no PR. Each round brings packages up to date with what is released now, so a change several levels down still needs a release at each level, which `notify` then carries onwards.
 
+## Protecting the default branch
+
+`protect.sh` gives each Lake package's default branch a ruleset named `lean-bump` that requires its CI jobs to pass before a merge, so nothing merges a bump PR that CI has not passed:
+
+```bash
+GITHUB_TOKEN=$(gh auth token) OWNER=... DRY_RUN=true ./protect.sh
+```
+
+It needs a token with administration rights on the repositories, which `LEAN_BUMP_TOKEN` deliberately lacks, so it runs locally with your own login rather than as a workflow. The jobs are those of the latest successful run of `Lean Action CI` (set `CI_WORKFLOW` for another name) on the default branch, required from GitHub Actions so no other app can satisfy them. A package with no such run is skipped. Repository admins may bypass the ruleset, so you can still push to the default branch directly. Rerun it after adding a package or changing its CI jobs: it updates the ruleset in place.
+
 ## Tokens
 
 Two tokens are involved:
@@ -93,4 +103,4 @@ Every repository the bump reaches must be public, or readable with the credentia
 
 ## Testing
 
-`tests/run.sh` builds fixture repositories locally and runs `bump.sh` and `check-base.sh` against them; it needs `elan`, `git`, `jq` and `perl`. `tests/github.sh` runs `notify` and `bootstrap` against a fake GitHub API.
+`tests/run.sh` builds fixture repositories locally and runs `bump.sh` and `check-base.sh` against them; it needs `elan`, `git`, `jq` and `perl`. `tests/github.sh` runs `notify`, `bootstrap` and `protect` against a fake GitHub API.

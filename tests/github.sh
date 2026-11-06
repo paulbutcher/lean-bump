@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Paul Butcher. All rights reserved.
 # Released under Apache 2.0 license as described in the file LICENSE.
 
-# Runs notify and bootstrap against a fake curl serving a fixed account:
+# Runs notify, bootstrap and protect against a fake curl serving a fixed account:
 #   o/done     Lake package with the workflow installed
 #   o/new      Lake package without it
 #   o/pending  Lake package without it, install PR already open
@@ -163,5 +163,36 @@ fixture POST/graphql 200 "$account"
 fixture GET/repos/o/new/contents/.github/workflows/lean-bump.yml 500
 out=$(run "$root/bootstrap.sh") && status=0 || status=$?
 check "an unreadable repository fails the run" "$status" 1
+
+fixture POST/graphql 200 "$(search "[$(repo o/done true), $(repo o/new true)]")"
+fixture 'GET/repos/o/done/actions/workflows?per_page=100' 200 \
+  '{"workflows": [{"id": 8, "name": "Bump dependencies"}, {"id": 7, "name": "Lean Action CI"}]}'
+fixture 'GET/repos/o/done/actions/workflows/7/runs?branch=main&status=success&per_page=1' 200 '{"workflow_runs": [{"id": 99}]}'
+fixture 'GET/repos/o/done/actions/runs/99/jobs?per_page=100' 200 \
+  '{"jobs": [{"name": "build", "conclusion": "success"}, {"name": "docs", "conclusion": "skipped"}]}'
+fixture GET/repos/o/done/rulesets 200 '[{"id": 2, "name": "other"}]'
+fixture 'GET/repos/o/new/actions/workflows?per_page=100' 200 '{"workflows": []}'
+out=$(run env DRY_RUN=true "$root/protect.sh")
+check "a protect dry run writes nothing" "$(writes)" ""
+check "a protect dry run reports the plan" "$out" \
+  $'would create ruleset in o/done requiring: build\nskipping o/new: no Lean Action CI workflow'
+
+out=$(run "$root/protect.sh")
+check "protect creates a ruleset where there is none" "$(writes)" "POST repos/o/done/rulesets"
+check "the ruleset requires the CI run's passing jobs from GitHub Actions, and admins may bypass it" \
+  "$(grep '^POST repos/o/done/rulesets' "$T/api/requests" | cut -d' ' -f3- |
+     jq -c '[.conditions.ref_name.include, .bypass_actors, .rules[0].parameters.required_status_checks]')" \
+  '[["~DEFAULT_BRANCH"],[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],[{"context":"build","integration_id":15368}]]'
+
+fixture GET/repos/o/done/rulesets 200 '[{"id": 2, "name": "other"}, {"id": 3, "name": "lean-bump"}]'
+fixture PUT/repos/o/done/rulesets/3 200
+out=$(run "$root/protect.sh")
+check "protect updates its own ruleset in place" "$(writes)" "PUT repos/o/done/rulesets/3"
+
+fixture 'GET/repos/o/done/actions/workflows/7/runs?branch=main&status=success&per_page=1' 200 '{"workflow_runs": []}'
+out=$(run "$root/protect.sh") && status=0 || status=$?
+check "protect skips a package whose CI has never passed" "$status;$(writes);$out" \
+  $'0;;skipping o/done: Lean Action CI has never passed on main\nskipping o/new: no Lean Action CI workflow'
+fixture POST/graphql 200 "$account"
 
 (( failures == 0 )) || { echo "$failures failed"; exit 1; }
