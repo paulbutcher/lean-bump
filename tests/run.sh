@@ -125,6 +125,27 @@ check "reports a carried bump as not requested" "$(sed -n '/`core\/`/,/`apps\/`/
 (cd "$T/multi" && OWNER_PATTERN="^$own/" SUMMARY_FILE=$T/summary6.md GITHUB_OUTPUT=$out "$bump" > "$T/log" 2>&1)
 check "a second multi-project run finds nothing to do" "$(cat "$out")" changed=false
 
+# A diamond: site requires model and renderer, and renderer's release still requires the older model,
+# so Lake keeps regular at the rev renderer pinned rather than the one the newer model requires.
+package "$own/regular" regular
+release "$own/regular" v0.2.0
+release "$own/regular" v0.2.1
+package "$own/model" model "regular@$own/regular@v0.2.0"
+release "$own/model" v0.4.0
+package "$own/model" model "regular@$own/regular@v0.2.1"
+release "$own/model" v0.4.1
+package "$own/renderer" renderer "model@$own/model@v0.4.0"
+release "$own/renderer" v0.1.0
+package "$T/site" site "model@$own/model@v0.4.0" "renderer@$own/renderer@v0.1.0" "foreign@$T/other/foreign@v1.0.0"
+(cd "$T/site" && lake update >/dev/null 2>&1)
+(cd "$T/site" && OWNER_PATTERN="^$own/" SUMMARY_FILE=$T/summary7.md "$bump" > "$T/log" 2>&1) \
+  || { cat "$T/log"; exit 1; }
+check "reports a dependency requiring an older version than the project has" \
+  "$(grep -c '`renderer` v0.1.0 requires `model` v0.4.0, but this project has v0.4.1' "$T/summary7.md")" 1
+check "reports a dependency requiring a newer version than the project has" \
+  "$(grep -c '`model` v0.4.1 requires `regular` v0.2.1, but this project has v0.2.0' "$T/summary7.md")" 1
+check "reports no disagreement where requirements agree" "$(grep -c 'Version disagreements' "$T/summary5.md" "$T/summary.md" | grep -vc ':0$')" 0
+
 # No requires to bump, so lake never runs and the old toolchains need not be installed.
 toolchain_bump() { # starting toolchain
   rm -rf "$T/tcapp"; mkdir "$T/tcapp"

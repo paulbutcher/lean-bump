@@ -226,6 +226,31 @@ bump_project() {
       echo "$others"
     fi
 
+    # Where two packages require one of the owner's packages at different revs, Lake keeps one and
+    # builds the other against it. The one left behind is usually a dependency with an unreleased
+    # bump, which holds back everything that requires it.
+    disagreements=$(
+      dir=$(jq -r '.packagesDir // ".lake/packages"' lake-manifest.json)
+      jq -r '.packages[] | select(.type == "git") | .name | ltrimstr("«") | rtrimstr("»")' lake-manifest.json |
+        while IFS= read -r dep; do
+          [[ -f $dir/$dep/lake-manifest.json ]] || continue
+          jq -rn --arg d "$dep" --arg pat "$OWNER_PATTERN" --slurpfile a lake-manifest.json --slurpfile b "$dir/$dep/lake-manifest.json" '
+            def unq: ltrimstr("«") | rtrimstr("»");
+            ($a[0].packages | map({key: (.name | unq), value: .}) | from_entries) as $have
+            | $b[0].packages[] | select(.type == "git" and .inherited == false and (.url | test($pat)))
+            | (.name | unq) as $n | $have[$n] as $h
+            | select($h != null and $h.rev != .rev)
+            | "- `\($d)` \($have[$d].inputRev) requires `\($n)` \(.inputRev), but this project has \($h.inputRev)"'
+        done)
+    if [[ -n $disagreements ]]; then
+      echo
+      echo "### Version disagreements"
+      echo
+      echo "Each dependency below is built against a version it was not released with. The cause is usually the one requiring an older version than the rest: it has an unreleased bump, and releasing it lets this project follow."
+      echo
+      echo "$disagreements"
+    fi
+
     toolchain_after=$(cat lean-toolchain 2>/dev/null || true)
     if [[ $toolchain_after != "$toolchain_before" ]]; then
       toolchain_changed=true
