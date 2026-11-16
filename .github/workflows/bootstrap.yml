@@ -15,9 +15,16 @@ jobs:
   bootstrap:
     runs-on: ubuntu-latest
     steps:
+      # With an owner and no repositories, the token reaches every repository the App is installed on.
+      - uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ vars.LEAN_BOT_APP_ID }}
+          private-key: ${{ secrets.LEAN_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
       - uses: actions/checkout@v7
       - run: ./bootstrap.sh
         env:
-          GITHUB_TOKEN: ${{ secrets.LEAN_BUMP_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
           OWNER: ${{ github.repository_owner }}
           DRY_RUN: ${{ inputs.dry-run }}

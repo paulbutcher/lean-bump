@@ -35,11 +35,17 @@ release() { # dir tag
   g -C "$1" add -A; g -C "$1" commit -q --allow-empty -m "$2"; g -C "$1" tag "$2"
 }
 
-# Stands in for leanprover/lean4: the newest stable release is the test toolchain, so bumps that
-# run lake update need no other toolchain.
-export LEAN_REPO=$T/lean4
-git init -q "$LEAN_REPO"
-for tag in v4.0.0 "${TC#*:}" v99.0.0-rc1; do g -C "$LEAN_REPO" commit -q --allow-empty -m "$tag"; g -C "$LEAN_REPO" tag "$tag"; done
+# Stands in for leanprover/lean4's releases: the newest stable release is the test toolchain, so
+# bumps that run lake update need no other toolchain. Newer ones are a prerelease, a draft, and a
+# release whose binaries are not uploaded yet.
+lean_release() { # tag prerelease draft assets
+  jq -n --arg t "$1" --argjson p "$2" --argjson d "$3" --argjson n "$4" \
+    '{tag_name: $t, prerelease: $p, draft: $d, assets: [range($n) | {name: "lean-\($t)-\(.)"}]}'
+}
+{ lean_release v4.0.0 false false 1; lean_release "${TC#*:}" false false 10
+  lean_release v99.0.0-rc1 true false 10; lean_release v98.0.0 false true 10
+  lean_release v97.0.0 false false 0; } | jq -s . > "$T/lean-releases.json"
+export LEAN_RELEASES=file://$T/lean-releases.json
 
 package "$own/shared" shared
 release "$own/shared" v1.0.0
@@ -158,7 +164,7 @@ toolchain_bump() { # starting toolchain
     || { cat "$T/log"; exit 1; }
 }
 toolchain_bump v4.0.0
-check "bumps the toolchain to the latest stable release" "$(cat "$T/tcapp/lean-toolchain")" "$TC"
+check "bumps the toolchain to the latest published stable release with binaries" "$(cat "$T/tcapp/lean-toolchain")" "$TC"
 check "names the toolchain in the outputs" "$(cat "$out")" $'changed=true\nbumped=lean-toolchain'
 check "reports the toolchain change" "$(grep -c "v4.0.0\` → \`$TC" "$T/summary4.md")" 1
 check "omits an empty requested section" "$(grep -c Requested "$T/summary4.md")" 0
@@ -167,6 +173,10 @@ check "bumps a release candidate to its release" "$(cat "$T/tcapp/lean-toolchain
 toolchain_bump v99.0.0-rc2
 check "never moves the toolchain backwards" "$(cat "$T/tcapp/lean-toolchain")" leanprover/lean4:v99.0.0-rc2
 check "a toolchain ahead of the latest release is nothing to do" "$(cat "$out")" changed=false
+echo leanprover/lean4:v4.0.0 > "$T/tcapp/lean-toolchain"
+(cd "$T/tcapp" && LEAN_RELEASES=file://$T/missing.json OWNER_PATTERN="^$own/" GITHUB_OUTPUT=/dev/null \
+  "$bump" > "$T/log" 2>&1) && status=succeeded || status=failed
+check "fails when the Lean releases cannot be read" "$status" failed
 
 check_base() { : > "$out"; (cd "$T/clone" && GITHUB_OUTPUT=$out "${bump%/*}/check-base.sh" > "$T/log" 2>&1) \
   || { cat "$T/log"; exit 1; }; cat "$out"; }

@@ -8,7 +8,7 @@ set -euo pipefail
 SUMMARY_FILE=${SUMMARY_FILE:-bump-summary.md}
 ALLOW_RC_TOOLCHAIN=${ALLOW_RC_TOOLCHAIN:-false}
 GITHUB_OUTPUT=${GITHUB_OUTPUT:-/dev/null}
-LEAN_REPO=${LEAN_REPO:-https://github.com/leanprover/lean4}
+LEAN_RELEASES=${LEAN_RELEASES:-https://api.github.com/repos/leanprover/lean4/releases?per_page=100}
 
 die() { echo "bump: $*" >&2; exit 1; }
 
@@ -34,13 +34,31 @@ toolchain_at() {
 
 # The latest stable Lean release, if it is newer than the project's toolchain. A toolchain that
 # is not a leanprover/lean4 release, such as a nightly, is left alone.
+#
+# Read from the GitHub releases rather than the tags: Lean pushes a version's tag first, and its
+# CI publishes the release and uploads the binaries elan installs some hours later. A release
+# with no binaries yet is skipped too, since the release is created before they are uploaded.
+latest_lean() {
+  local auth=()
+  if [[ ! -f $work/lean-latest ]]; then
+    [[ -n ${GITHUB_TOKEN:-} ]] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+    curl -fsSL --retry 4 -H "Accept: application/vnd.github+json" "${auth[@]}" -o "$work/lean-releases" \
+      "$LEAN_RELEASES" || die "could not list Lean releases from $LEAN_RELEASES"
+    jq -r '.[] | select(.draft == false and .prerelease == false and (.assets | length) > 0) | .tag_name' \
+      "$work/lean-releases" | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } | sort -V | tail -n 1 \
+      > "$work/lean-latest.new" && mv "$work/lean-latest.new" "$work/lean-latest" \
+      || die "could not read Lean releases from $LEAN_RELEASES"
+  fi
+  cat "$work/lean-latest"
+}
+
 newer_toolchain() {
   local cur base rc latest
   cur=$(cat lean-toolchain 2>/dev/null || true)
   [[ $cur =~ ^leanprover/lean4:(v[0-9]+\.[0-9]+\.[0-9]+)(-rc[0-9]+)?$ ]] || return 0
   base=${BASH_REMATCH[1]} rc=${BASH_REMATCH[2]}
-  latest=$(git ls-remote --tags --refs "$LEAN_REPO" | sed 's|.*refs/tags/||' \
-    | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } | sort -V | tail -n 1)
+  # Called in a command substitution, where set -e does not apply.
+  latest=$(latest_lean) || exit
   [[ -n $latest ]] || return 0
   if [[ $latest == "$base" ]]; then [[ -n $rc ]] || return 0
   elif [[ $(printf '%s\n' "$base" "$latest" | sort -V | tail -n 1) != "$latest" ]]; then return 0; fi

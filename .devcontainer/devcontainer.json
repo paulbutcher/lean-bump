@@ -2,6 +2,10 @@
 	"name": "Ubuntu",
 	"build": { "dockerfile": "Dockerfile" },
 
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
   // Runs on the host before the container exists, so that the bind mount below has
   // a directory to attach to. Without it Docker invents one owned by root, and the
   // container's `vscode` user cannot then write its own configuration.

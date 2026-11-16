@@ -17,5 +17,8 @@ else
   curl -fsSL https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --no-modify-path
 fi
 
-# So that the first `lake build` is a build rather than a toolchain download.
-elan toolchain install "$(tr -d '[:space:]' < lean-toolchain)"
+# So that the first `lake build` is a build rather than a toolchain download. Not
+# every project using this setup is a Lake package: this one has no toolchain.
+if [ -f lean-toolchain ]; then
+  elan toolchain install "$(tr -d '[:space:]' < lean-toolchain)"
+fi

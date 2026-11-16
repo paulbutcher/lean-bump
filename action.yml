@@ -44,6 +44,7 @@ runs:
       env:
         OWNER_PATTERN: ${{ inputs.owner-pattern || format('github\.com[/:]{0}/', github.repository_owner) }}
         ALLOW_RC_TOOLCHAIN: ${{ inputs.allow-rc-toolchain }}
+        GITHUB_TOKEN: ${{ github.token }}
         SUMMARY_FILE: ${{ runner.temp }}/lean-bump-summary.md
       run: bash "$GITHUB_ACTION_PATH/bump.sh"
 
