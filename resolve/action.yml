@@ -129,6 +129,7 @@ runs:
         RUN_ID: ${{ github.event.workflow_run.id }}
         PR: ${{ steps.guard.outputs.pr }}
         HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        MARKER: ${{ steps.guard.outputs.marker }}
         BRANCH: ${{ inputs.branch }}
         DRY_RUN: ${{ inputs.dry-run }}
         CONTEXT_DIR: ${{ runner.temp }}/lean-bump-resolve
@@ -143,6 +144,7 @@ runs:
         REPO: ${{ github.repository }}
         PR: ${{ steps.guard.outputs.pr }}
         HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        MARKER: ${{ steps.guard.outputs.marker }}
         MERGE_METHOD: ${{ inputs.merge-method }}
         DRY_RUN: ${{ inputs.dry-run }}
       run: bash "$GITHUB_ACTION_PATH/release.sh"

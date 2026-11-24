@@ -9,7 +9,7 @@
 #   changelog  CI passed on a library with no changelog entry: the agent writes one
 #   release    CI passed on a library with its changelog entry: merge and tag
 #   merge      CI passed on an application: merge
-# Also sets pr and base, and leaves the PR description and failed CI logs in CONTEXT_DIR.
+# Also sets pr, base and marker, and leaves the PR description and failed CI logs in CONTEXT_DIR.
 
 set -euo pipefail
 source "$(dirname "$0")/../lib/github.sh"
@@ -42,12 +42,17 @@ jq -e --arg l "$LABEL" '.[0].labels | any(.name == $l)' "$body_file" > /dev/null
   && result skip "PR #$pr is waiting for a decision"
 jq -r '.[0].body // ""' "$body_file" > "$CONTEXT_DIR/pr-description.md"
 
-# Each run leaves a comment marked with the commit it acted on, so the second of the CI runs that
-# a push and its pull_request event start finds the first one's and does nothing.
+# Each run leaves a comment marked with the commit it acted on and how CI concluded there, so the
+# second of the CI runs that a push and its pull_request event start finds the first one's and does
+# nothing, while a commit handled as a failure is acted on again if a rerun of CI passes. A marker
+# without a conclusion predates them, and counts as a failure's.
+marker="<!-- lean-bump-resolve $HEAD_SHA $CONCLUSION -->"
+out marker "$marker"
 code=$(api GET "repos/$REPO/issues/$pr/comments?per_page=100")
 [[ $code == 200 ]] || die "could not read comments on #$pr (HTTP $code): $(error_message)"
-jq -e --arg m "<!-- lean-bump-resolve $HEAD_SHA -->" 'any(.body | contains($m))' "$body_file" > /dev/null \
-  && result skip "PR #$pr was already handled at $HEAD_SHA"
+jq -e --arg m "$marker" --arg old "<!-- lean-bump-resolve $HEAD_SHA -->" --arg c "$CONCLUSION" \
+    'any(.body | contains($m) or ($c == "failure" and contains($old)))' "$body_file" > /dev/null \
+  && result skip "PR #$pr was already handled at $HEAD_SHA after CI's $CONCLUSION"
 
 if [[ $CONCLUSION == failure ]]; then
   code=$(api GET "repos/$REPO/pulls/$pr/commits?per_page=100")

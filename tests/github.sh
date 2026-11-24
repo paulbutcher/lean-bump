@@ -2,8 +2,8 @@
 # Copyright (c) 2026 Paul Butcher. All rights reserved.
 # Released under Apache 2.0 license as described in the file LICENSE.
 
-# Runs notify, bootstrap, protect and clear-label against a fake curl serving a fixed account, and
-# checks how a changelog's version is read:
+# Runs notify, bootstrap, protect, clear-label and resolve's guard against a fake curl serving a
+# fixed account, and checks how a changelog's version is read:
 #   o/done     Lake package with the workflow installed
 #   o/new      Lake package without it
 #   o/pending  Lake package without it, install PR already open
@@ -255,6 +255,32 @@ out=$(run "$root/bootstrap.sh") && status=0 || status=$?
 check "the rate limit report keeps a failed run's status" "$status;$(grep -c '^rate limit' <<< "$out")" "1;1"
 installed o/new lean-bump.yml
 rm "$T/api/GET:rate_limit"
+
+mkdir -p "$T/ctx"
+fixture 'GET/repos/o/done/pulls?head=o:lean-bump&state=open' 200 \
+  '[{"number": 5, "base": {"ref": "main"}, "head": {"sha": "abc"}, "user": {"login": "o", "type": "User"}, "labels": [], "body": ""}]'
+fixture 'GET/repos/o/done/commits/abc/check-runs?per_page=100' 200 '{"check_runs": [{"status": "in_progress"}]}'
+# guard CONCLUSION MARKER...: runs guard on a CI run that concluded CONCLUSION at abc, with a comment per MARKER.
+guard() {
+  local c=$1; shift
+  fixture 'GET/repos/o/done/issues/5/comments?per_page=100' 200 \
+    "$(printf '%s\n' "$@" | jq -Rsc 'split("\n")[:-1] | map({body: "Done.\n\n\(.)"})')"
+  : > "$T/guard.out"
+  run env REPO=o/done RUN_ID=1 HEAD_SHA=abc HEAD_REPO=o/done HEAD_BRANCH=lean-bump CONCLUSION="$c" \
+    CONTEXT_DIR="$T/ctx" GITHUB_OUTPUT="$T/guard.out" "$root/resolve/guard.sh" | grep '^resolve:'
+}
+check "guard skips the second CI run of a commit it handled" \
+  "$(guard success '<!-- lean-bump-resolve abc success -->')" "resolve: PR #5 was already handled at abc after CI's success"
+check "guard marks its comments with the commit and CI's conclusion" \
+  "$(grep '^marker=' "$T/guard.out")" "marker=<!-- lean-bump-resolve abc success -->"
+check "guard acts when CI passes on a rerun of a commit it handled as a failure" \
+  "$(guard success '<!-- lean-bump-resolve abc failure -->')" "resolve: checks on abc are still running"
+check "guard counts a marker without a conclusion as a failure's" \
+  "$(guard success '<!-- lean-bump-resolve abc -->');$(guard failure '<!-- lean-bump-resolve abc -->')" \
+  "resolve: checks on abc are still running;resolve: PR #5 was already handled at abc after CI's failure"
+check "guard ignores markers for other commits" \
+  "$(guard success '<!-- lean-bump-resolve abcd success -->' '<!-- lean-bump-resolve ab success -->')" \
+  "resolve: checks on abc are still running"
 
 source "$root/lib/changelog.sh"
 changelog() { printf '# Changelog\n\n%s\n' "$@" > "$T/CHANGELOG.md"; changelog_version "$T/CHANGELOG.md"; }

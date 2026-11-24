@@ -108,4 +108,4 @@ Every repository the bump reaches must be public, or readable with the credentia
 
 ## Testing
 
-`tests/run.sh` builds fixture repositories locally and runs `bump.sh` and `check-base.sh` against them; it needs `elan`, `git`, `jq` and `perl`. `tests/github.sh` runs `notify`, `bootstrap`, `protect` and `clear-label.sh` against a fake GitHub API, and checks how a changelog's version is read.
+`tests/run.sh` builds fixture repositories locally and runs `bump.sh` and `check-base.sh` against them; it needs `elan`, `git`, `jq` and `perl`. `tests/github.sh` runs `notify`, `bootstrap`, `protect`, `clear-label.sh` and resolve's `guard.sh` against a fake GitHub API, and checks how a changelog's version is read.

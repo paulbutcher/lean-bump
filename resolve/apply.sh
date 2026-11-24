@@ -11,7 +11,7 @@ source "$(dirname "$0")/../lib/github.sh"
 source "$(dirname "$0")/../lib/changelog.sh"
 REPORT_RATE_LIMIT=true
 
-: "${ACTION:?}" "${REPO:?}" "${PR:?}" "${HEAD_SHA:?}" "${CONTEXT_DIR:?}" "${GITHUB_TOKEN:?}"
+: "${ACTION:?}" "${REPO:?}" "${PR:?}" "${HEAD_SHA:?}" "${MARKER:?}" "${CONTEXT_DIR:?}" "${GITHUB_TOKEN:?}"
 BRANCH=${BRANCH:-lean-bump}
 LABEL=${LABEL:-lean-bump: needs decision}
 DRY_RUN=${DRY_RUN:-false}
@@ -19,7 +19,7 @@ DRY_RUN=${DRY_RUN:-false}
 comment() {
   local code
   code=$(api POST "repos/$REPO/issues/$PR/comments" \
-           "$(jq -cn --arg b "$1"$'\n\n'"<!-- lean-bump-resolve $HEAD_SHA -->" '{body: $b}')")
+           "$(jq -cn --arg b "$1"$'\n\n'"$MARKER" '{body: $b}')")
   [[ $code == 201 ]] || die "could not comment on #$PR (HTTP $code): $(error_message)"
 }
 

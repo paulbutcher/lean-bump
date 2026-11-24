@@ -11,7 +11,7 @@ source "$(dirname "$0")/../lib/github.sh"
 source "$(dirname "$0")/../lib/changelog.sh"
 REPORT_RATE_LIMIT=true
 
-: "${ACTION:?}" "${REPO:?}" "${PR:?}" "${HEAD_SHA:?}" "${GITHUB_TOKEN:?}"
+: "${ACTION:?}" "${REPO:?}" "${PR:?}" "${HEAD_SHA:?}" "${MARKER:?}" "${GITHUB_TOKEN:?}"
 MERGE_METHOD=${MERGE_METHOD:-merge}
 DRY_RUN=${DRY_RUN:-false}
 
@@ -28,7 +28,7 @@ if [[ $DRY_RUN == true ]]; then
   msg="**Dry run:** would merge this"
   [[ $ACTION == release ]] && msg+=" and tag \`$tag\`"
   code=$(api POST "repos/$REPO/issues/$PR/comments" \
-           "$(jq -cn --arg b "$msg."$'\n\n'"<!-- lean-bump-resolve $HEAD_SHA -->" '{body: $b}')")
+           "$(jq -cn --arg b "$msg."$'\n\n'"$MARKER" '{body: $b}')")
   [[ $code == 201 ]] || die "could not comment on #$PR (HTTP $code): $(error_message)"
   exit 0
 fi
