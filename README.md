@@ -17,6 +17,8 @@ It then runs `lake update` naming only those packages, without `--keep-toolchain
 
 A repository can hold several Lake projects, each directory with a `lake-manifest.json` outside `.lake`, such as a test package beside the root that requires it by path. Each is bumped the same way, after any project it requires by path. A package that such a dependency's update moved is updated in the requiring project too, so its manifest follows, and is reported there under "Also changed". If the base branch already has the same changes by the time the PR would open, for example because an earlier bump PR was merged during the run, no PR is opened and `changed` is `false`.
 
+When it pushes new changes to a PR that is already open, it removes the PR's `lean-bump: needs decision` label, since that decision was about what the PR held before. The `token` needs permission to edit pull requests for this; if it lacks it, the run warns and leaves the label.
+
 ## Usage
 
 Add [templates/lean-bump.yml](templates/lean-bump.yml) to a repository as `.github/workflows/lean-bump.yml`, or let [bootstrap](#bootstrap) do it. It runs weekly, on demand, and whenever a sibling package is released.

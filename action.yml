@@ -65,3 +65,12 @@ runs:
         commit-message: 'Bump ${{ steps.bump.outputs.bumped }}'
         title: 'Bump ${{ steps.bump.outputs.bumped }}'
         body-path: ${{ runner.temp }}/lean-bump-summary.md
+
+    - name: Clear decision label
+      if: steps.pr.outputs.pull-request-operation == 'updated'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ steps.pr.outputs.pull-request-number }}
+      run: bash "$GITHUB_ACTION_PATH/clear-label.sh"

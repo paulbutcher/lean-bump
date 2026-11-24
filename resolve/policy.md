@@ -31,7 +31,7 @@ A release adds an entry to `CHANGELOG.md` and sets every declaration of the pack
 
 ## Changelog
 
-`CHANGELOG.md` lists releases newest first under `# Changelog`. Each entry has a heading `## [x.y.z] - YYYY-MM-DD`, with the date the entry is written in UTC, followed by one bullet per change, written for someone who uses the package.
+`CHANGELOG.md` lists releases newest first under `# Changelog`. Each entry has a heading `## [x.y.z] - YYYY-MM-DD`, with the date the entry is written in UTC, followed by one bullet per change, written for someone who uses the package. Where the existing headings take another form, such as `## x.y.z` with no brackets or date, a new heading takes that form instead: either is read as the release's version.
 
 Prefix each breaking change with `Breaking:`, and say what to use in its place.
 

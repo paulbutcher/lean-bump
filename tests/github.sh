@@ -2,7 +2,8 @@
 # Copyright (c) 2026 Paul Butcher. All rights reserved.
 # Released under Apache 2.0 license as described in the file LICENSE.
 
-# Runs notify, bootstrap and protect against a fake curl serving a fixed account:
+# Runs notify, bootstrap, protect and clear-label against a fake curl serving a fixed account, and
+# checks how a changelog's version is read:
 #   o/done     Lake package with the workflow installed
 #   o/new      Lake package without it
 #   o/pending  Lake package without it, install PR already open
@@ -199,5 +200,27 @@ out=$(run "$root/protect.sh") && status=0 || status=$?
 check "protect skips a package whose CI has never passed" "$status;$(writes);$out" \
   $'0;;skipping o/done: Lean Action CI has never passed on main\nskipping o/new: no Lean Action CI workflow'
 fixture POST/graphql 200 "$account"
+
+label_path='DELETE/repos/o/done/issues/5/labels/lean-bump%3A%20needs%20decision'
+fixture "$label_path" 200 '[]'
+out=$(run env REPO=o/done PR=5 GITHUB_TOKEN=t "$root/clear-label.sh") && status=0 || status=$?
+check "clear-label removes the label by its encoded name" "$status;$(writes);$out" \
+  '0;DELETE repos/o/done/issues/5/labels/lean-bump%3A%20needs%20decision;bump: removed `lean-bump: needs decision` from #5'
+fixture "$label_path" 404 '{"message": "Label does not exist"}'
+out=$(run env REPO=o/done PR=5 GITHUB_TOKEN=t "$root/clear-label.sh") && status=0 || status=$?
+check "clear-label is quiet when the PR has no label" "$status;$out" "0;"
+fixture "$label_path" 403 '{"message": "Resource not accessible by integration"}'
+out=$(run env REPO=o/done PR=5 GITHUB_TOKEN=t "$root/clear-label.sh") && status=0 || status=$?
+check "clear-label only warns when it cannot remove the label" "$status;$out" \
+  '0;::warning::could not remove `lean-bump: needs decision` from #5 (HTTP 403): Resource not accessible by integration'
+
+source "$root/lib/changelog.sh"
+changelog() { printf '# Changelog\n\n%s\n' "$@" > "$T/CHANGELOG.md"; changelog_version "$T/CHANGELOG.md"; }
+check "a changelog version is read from a bracketed heading with a date" \
+  "$(changelog '## [0.3.0] - 2026-11-23' '- x' '## [0.2.0] - 2026-10-01')" 0.3.0
+check "a changelog version is read from a bare heading" "$(changelog '## 0.3.0' '- x' '## 0.2.2')" 0.3.0
+check "a changelog version skips headings that are not a release" \
+  "$(changelog '## Unreleased' '## [1.0.0-rc1]' '## 1.0.0rc' '## v0.9.0' '## [0.3.0]x' '## 0.2.2 - 2026-10-01')" 0.2.2
+check "a changelog with no versioned entry has no version" "$(changelog '## Unreleased')" ""
 
 (( failures == 0 )) || { echo "$failures failed"; exit 1; }

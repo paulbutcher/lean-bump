@@ -8,6 +8,7 @@
 
 set -euo pipefail
 source "$(dirname "$0")/../lib/github.sh"
+source "$(dirname "$0")/../lib/changelog.sh"
 
 : "${ACTION:?}" "${REPO:?}" "${PR:?}" "${HEAD_SHA:?}" "${CONTEXT_DIR:?}" "${GITHUB_TOKEN:?}"
 BRANCH=${BRANCH:-lean-bump}
@@ -58,7 +59,7 @@ fi
 ! grep -q '^\.github/' <<< "$changed" || die "the agent changed files under .github/: $(grep '^\.github/' <<< "$changed")"
 if [[ $outcome == changelog ]]; then
   grep -qx CHANGELOG.md <<< "$changed" || die "a changelog result left CHANGELOG.md unchanged"
-  new=$(sed -nE 's/^## \[([0-9]+\.[0-9]+\.[0-9]+)\].*/\1/p' CHANGELOG.md | head -n1)
+  new=$(changelog_version CHANGELOG.md)
   [[ -n $new ]] || die "CHANGELOG.md has no entry with a version"
   old=$(git tag -l | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)
   old=${old#v}

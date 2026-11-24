@@ -8,13 +8,14 @@
 
 set -euo pipefail
 source "$(dirname "$0")/../lib/github.sh"
+source "$(dirname "$0")/../lib/changelog.sh"
 
 : "${ACTION:?}" "${REPO:?}" "${PR:?}" "${HEAD_SHA:?}" "${GITHUB_TOKEN:?}"
 MERGE_METHOD=${MERGE_METHOD:-merge}
 DRY_RUN=${DRY_RUN:-false}
 
 if [[ $ACTION == release ]]; then
-  version=$(sed -nE 's/^## \[([0-9]+\.[0-9]+\.[0-9]+)\].*/\1/p' CHANGELOG.md | head -n1)
+  version=$(changelog_version CHANGELOG.md)
   [[ -n $version ]] || die "CHANGELOG.md has no entry with a version"
   latest=$(git tag -l | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)
   [[ $latest == [0-9]* ]] && tag=$version || tag=v$version
