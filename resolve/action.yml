@@ -148,3 +148,13 @@ runs:
         MERGE_METHOD: ${{ inputs.merge-method }}
         DRY_RUN: ${{ inputs.dry-run }}
       run: bash "$GITHUB_ACTION_PATH/release.sh"
+
+    - name: Rebuild on the base
+      if: steps.guard.outputs.action == 'rebump'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ steps.guard.outputs.pr }}
+        DRY_RUN: ${{ inputs.dry-run }}
+      run: bash "$GITHUB_ACTION_PATH/rebump.sh"

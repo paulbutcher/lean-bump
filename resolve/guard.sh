@@ -4,7 +4,8 @@
 
 # Decides what resolve does about a finished CI run, and sets action to one of:
 #   skip       nothing to do: not the bump PR, an older commit, or already handled
-#   fix        CI failed: the agent fixes the build or explains the decision it needs
+#   rebump     the PR is behind its base: bump rebuilds it on the base as it is now
+#   fix      CI failed: the agent fixes the build or explains the decision it needs
 #   give-up    CI failed again after MAX_ATTEMPTS fixes
 #   changelog  CI passed on a library with no changelog entry: the agent writes one
 #   release    CI passed on a library with its changelog entry: merge and tag
@@ -53,6 +54,15 @@ code=$(api GET "repos/$REPO/issues/$pr/comments?per_page=100")
 jq -e --arg m "$marker" --arg old "<!-- lean-bump-resolve $HEAD_SHA -->" --arg c "$CONCLUSION" \
     'any(.body | contains($m) or ($c == "failure" and contains($old)))' "$body_file" > /dev/null \
   && result skip "PR #$pr was already handled at $HEAD_SHA after CI's $CONCLUSION"
+
+# A PR behind its base was built on an older one, for example by a bump that started just before a
+# merge. Its CI result and its versions may no longer hold: after a release, its lakefile and
+# changelog are a version behind. Bump rebuilds it on the base as it is now, or closes it if the
+# base already has everything it changes, and CI and resolve then run on that.
+code=$(api GET "repos/$REPO/compare/$base...$HEAD_SHA")
+[[ $code == 200 ]] || die "could not compare #$pr with $base (HTTP $code): $(error_message)"
+behind=$(jq -r .behind_by "$body_file")
+(( behind == 0 )) || result rebump "PR #$pr is $behind commits behind $base"
 
 if [[ $CONCLUSION == failure ]]; then
   code=$(api GET "repos/$REPO/pulls/$pr/commits?per_page=100")

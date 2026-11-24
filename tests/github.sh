@@ -2,8 +2,8 @@
 # Copyright (c) 2026 Paul Butcher. All rights reserved.
 # Released under Apache 2.0 license as described in the file LICENSE.
 
-# Runs notify, bootstrap, protect, clear-label and resolve's guard against a fake curl serving a
-# fixed account, and checks how a changelog's version is read:
+# Runs notify, bootstrap, protect, clear-label, open-pr and resolve's guard and rebump against a fake
+# curl serving a fixed account, and checks how a changelog's version is read:
 #   o/done     Lake package with the workflow installed
 #   o/new      Lake package without it
 #   o/pending  Lake package without it, install PR already open
@@ -266,6 +266,7 @@ mkdir -p "$T/ctx"
 fixture 'GET/repos/o/done/pulls?head=o:lean-bump&state=open' 200 \
   '[{"number": 5, "base": {"ref": "main"}, "head": {"sha": "abc"}, "user": {"login": "o", "type": "User"}, "labels": [], "body": ""}]'
 fixture 'GET/repos/o/done/commits/abc/check-runs?per_page=100' 200 '{"check_runs": [{"status": "in_progress"}]}'
+fixture 'GET/repos/o/done/compare/main...abc' 200 '{"behind_by": 0}'
 # guard CONCLUSION MARKER...: runs guard on a CI run that concluded CONCLUSION at abc, with a comment per MARKER.
 guard() {
   local c=$1; shift
@@ -287,6 +288,26 @@ check "guard counts a marker without a conclusion as a failure's" \
 check "guard ignores markers for other commits" \
   "$(guard success '<!-- lean-bump-resolve abcd success -->' '<!-- lean-bump-resolve ab success -->')" \
   "resolve: checks on abc are still running"
+fixture 'GET/repos/o/done/compare/main...abc' 200 '{"behind_by": 2}'
+check "guard has bump rebuild a PR that is behind its base" "$(guard success);$(grep '^action=' "$T/guard.out")" \
+  "resolve: PR #5 is 2 commits behind main;action=rebump"
+check "guard has bump rebuild a stale PR whose CI failed, rather than fix it" "$(guard failure)" \
+  "resolve: PR #5 is 2 commits behind main"
+fixture 'GET/repos/o/done/compare/main...abc' 200 '{"behind_by": 0}'
+
+out=$(run env REPO=o/done PR=5 GITHUB_TOKEN=t "$root/resolve/rebump.sh") && status=0 || status=$?
+check "rebump sends the repository its own bump event" "$status;$(writes)" "0;POST repos/o/done/dispatches"
+out=$(run env REPO=o/done PR=5 GITHUB_TOKEN=t DRY_RUN=true "$root/resolve/rebump.sh")
+check "a rebump dry run writes nothing" "$(writes);$out" ";would rebuild #5 on its base"
+
+: > "$T/open.out"
+out=$(run env REPO=o/done BRANCH=lean-bump GITHUB_TOKEN=t GITHUB_OUTPUT="$T/open.out" "$root/open-pr.sh")
+check "open-pr finds the open bump PR" "$(cat "$T/open.out");$out" \
+  "open=true;bump: closing #5, since the base already has everything it changes"
+fixture 'GET/repos/o/done/pulls?head=o:lean-bump&state=open' 200 '[]'
+: > "$T/open.out"
+out=$(run env REPO=o/done BRANCH=lean-bump GITHUB_TOKEN=t GITHUB_OUTPUT="$T/open.out" "$root/open-pr.sh")
+check "open-pr reports when there is none" "$(cat "$T/open.out");$out" "open=false;"
 
 source "$root/lib/changelog.sh"
 changelog() { printf '# Changelog\n\n%s\n' "$@" > "$T/CHANGELOG.md"; changelog_version "$T/CHANGELOG.md"; }

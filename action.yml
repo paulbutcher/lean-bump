@@ -54,9 +54,20 @@ runs:
       shell: bash
       run: bash "$GITHUB_ACTION_PATH/check-base.sh"
 
+    - name: Find an open pull request
+      id: open
+      if: steps.base.outputs.changed != 'true'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        BRANCH: ${{ inputs.branch }}
+      run: bash "$GITHUB_ACTION_PATH/open-pr.sh"
+
+    # With nothing to push, this closes an open PR by deleting its branch.
     - name: Open pull request
       id: pr
-      if: steps.base.outputs.changed == 'true'
+      if: steps.base.outputs.changed == 'true' || steps.open.outputs.open == 'true'
       uses: peter-evans/create-pull-request@v8
       with:
         token: ${{ inputs.token }}
