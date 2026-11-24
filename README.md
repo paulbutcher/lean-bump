@@ -52,6 +52,8 @@ Locally, `GITHUB_TOKEN` is just the variable the script reads. Your own login wo
 
 For each Lake package in the account, it triggers the bump workflow if the package has `.github/workflows/lean-bump.yml`. It also opens a PR that adds the bump and resolve workflows where they are missing, and brings every workflow from [templates](templates) that the package has up to date, notify included. Run it again after merging those PRs to trigger the newly installed workflows. It is safe to rerun: a package whose install PR is still open is skipped, and one whose workflows all match their templates gets no PR. Each round brings packages up to date with what is released now, so a change several levels down still needs a release at each level, which `notify` then carries onwards.
 
+To bootstrap only some packages, name them in the workflow's `repos` input, or in `REPOS` locally, separated by spaces or commas. The rest of the account is left alone. A name that is not one of the account's Lake packages stops the run before it changes anything.
+
 ## Protecting the default branch
 
 `protect.sh` gives each Lake package's default branch a ruleset named `lean-bump` that requires its CI jobs to pass before a merge, so nothing merges a bump PR that CI has not passed:

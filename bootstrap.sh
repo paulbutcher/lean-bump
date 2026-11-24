@@ -8,6 +8,8 @@ source "$here/lib/github.sh"
 REPORT_RATE_LIMIT=true
 
 : "${OWNER:?set OWNER to the account to bootstrap}"
+# Repositories to bootstrap, by name, separated by spaces or commas. Empty for every Lake package.
+REPOS=${REPOS:-}
 EVENT_TYPE=${EVENT_TYPE:-lean-dependency-released}
 DRY_RUN=${DRY_RUN:-false}
 workflows=.github/workflows
@@ -70,6 +72,16 @@ install() {
 }
 
 find_lake_repos "$OWNER"
+if [[ -n ${REPOS//[ ,]/} ]]; then
+  # A name that is not one of the account's Lake packages is a mistake, not a package to skip.
+  selected=()
+  for name in ${REPOS//,/ }; do
+    repo=$OWNER/${name#"$OWNER/"}
+    printf '%s\n' "${LAKE_REPOS[@]}" | grep -qixF "$repo" || die "$repo is not a Lake package in $OWNER"
+    selected+=("$(printf '%s\n' "${LAKE_REPOS[@]}" | grep -ixF "$repo")")
+  done
+  LAKE_REPOS=("${selected[@]}")
+fi
 status=0
 for repo in "${LAKE_REPOS[@]}"; do
   stale=$(stale "$repo") || { status=1; continue; }

@@ -118,6 +118,12 @@ out=$(run env DRY_RUN=true "$root/bootstrap.sh")
 check "a bootstrap dry run writes nothing" "$(writes)" ""
 check "a bootstrap dry run reports the plan" "$out" \
   $'would notify o/done\nwould open install PR for o/new: lean-bump.yml lean-bump-resolve.yml\ninstall PR pending for o/pending'
+out=$(run env DRY_RUN=true REPOS='new, o/PENDING' "$root/bootstrap.sh")
+check "bootstrap limited to named repositories leaves the others alone" "$out" \
+  $'would open install PR for o/new: lean-bump.yml lean-bump-resolve.yml\ninstall PR pending for o/pending'
+out=$(run env DRY_RUN=true REPOS='new other' "$root/bootstrap.sh") && status=0 || status=$?
+check "bootstrap refuses a name that is not a Lake package" "$status;$out" \
+  "1;bootstrap.sh: o/other is not a Lake package in o"
 
 out=$(run "$root/bootstrap.sh")
 check "bootstrap notifies installed packages and installs the workflows elsewhere" "$(writes)" \

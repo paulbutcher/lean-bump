@@ -10,6 +10,10 @@ on:
         description: Report what would happen without changing anything.
         type: boolean
         default: true
+      repos:
+        description: Repositories to bootstrap, by name, separated by spaces or commas. Empty for every Lake package.
+        type: string
+        default: ''
 
 jobs:
   bootstrap:
@@ -28,3 +32,4 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
           OWNER: ${{ github.repository_owner }}
           DRY_RUN: ${{ inputs.dry-run }}
+          REPOS: ${{ inputs.repos }}
