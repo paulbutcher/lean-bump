@@ -4,7 +4,9 @@
 API=${GITHUB_API_URL:-https://api.github.com}
 body_file=$(mktemp)
 header_file=$(mktemp)
-trap 'rm -f "$body_file" "$header_file"' EXIT
+# A script that sets REPORT_RATE_LIMIT=true reports its token's remaining budget as it exits.
+REPORT_RATE_LIMIT=false
+trap '[[ $REPORT_RATE_LIMIT != true ]] || report_rate_limit || true; rm -f "$body_file" "$header_file"' EXIT
 
 die() { echo "$(basename "$0"): $*" >&2; exit 1; }
 
@@ -48,6 +50,19 @@ api() {
     sleep "$wait"
   done
   printf '%s' "$code"
+}
+
+# report_rate_limit: prints how much of the token's hourly REST and GraphQL budgets is left, and
+# warns when either is below a quarter. Reading it costs nothing against them. Every run on the
+# App's token shares the installation's budgets, so this shows the headroom across all of them.
+report_rate_limit() {
+  [[ $(api GET rate_limit) == 200 ]] || return 0
+  jq -r '.resources as $r | ["core", "graphql"] | map(select($r[.]) as $k
+      | "\($k) \($r[$k].remaining)/\($r[$k].limit) until \($r[$k].reset | todate)")
+    | "rate limit: " + join(", ")' "$body_file"
+  jq -r '.resources as $r | ["core", "graphql"][] | select($r[.] and $r[.].remaining * 4 < $r[.].limit) as $k
+    | "::warning::GitHub rate limit: \($k) has \($r[$k].remaining) of \($r[$k].limit) requests left until \($r[$k].reset | todate)"' \
+    "$body_file"
 }
 
 # error_message: prints the message in the last api call's error response, if any.

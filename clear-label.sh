@@ -9,6 +9,7 @@
 
 set -euo pipefail
 source "$(dirname "$0")/lib/github.sh"
+REPORT_RATE_LIMIT=true
 
 : "${REPO:?}" "${PR:?}" "${GITHUB_TOKEN:?}"
 LABEL=${LABEL:-lean-bump: needs decision}

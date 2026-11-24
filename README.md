@@ -38,7 +38,7 @@ To have a release ripple through your packages, add [templates/lean_bump_notify.
 
 The tag patterns match the release tags the bump looks for, so prerelease tags such as `v1.2.0-rc1` notify nothing. GitHub does not start workflows for a tag pushed with `GITHUB_TOKEN`, nor for any tag when more than three are pushed at once. If a release workflow pushes the tag with `GITHUB_TOKEN`, add the `notify` step to that workflow instead, after the tag is pushed.
 
-`notify` sends `lean-dependency-released` to every non-archived, non-fork repository in the account with a root `lake-manifest.json`, other than the one releasing. There is no list of dependents to maintain: a repository that does not depend on the release runs a bump that finds nothing and opens no PR. Each one that does opens a PR; merging and tagging it notifies everything again, which carries the release to the next level.
+`notify` sends `lean-dependency-released` to every non-archived, non-fork repository in the account with a root `lake-manifest.json` and a Lake project that requires the releasing repository directly. It reads every `lake-manifest.json` outside `.lake` on the default branch, the same projects the bump moves, so a test package's requires count as well as the root's. There is no list of dependents to maintain, and a repository it cannot read is notified anyway. Each one notified opens a PR; merging and tagging it notifies its own dependents, which carries the release to the next level.
 
 ## Bootstrap
 
@@ -76,7 +76,7 @@ Two tokens are involved:
 | `bootstrap` | the App's | Adds a workflow file and opens a PR in each of the account's other repositories. |
 | `resolve` | the App's | Pushes fixes, comments, merges and tags. |
 
-`notify` finds the account's Lake packages with one GraphQL query per 100 repositories, then sends the events a second apart. Each event starts a bump run on the same token, so if GitHub still reports a rate limit, `notify` and `bootstrap` wait as long as it asks and retry, up to four times. A search or other read that hits a transient server error (HTTP 502, 503 or 504) is retried the same way, after 5, 10, 20 and 40 seconds; a write is not, because it may already have taken effect.
+`notify` finds the account's Lake packages with one GraphQL query per 100 repositories, reads each one's file list and manifests, then sends the events a second apart. Reads are cheap, while GitHub's secondary limits cap writes at roughly 80 a minute and 500 an hour, so sending only to dependents is what keeps a cascade of releases clear of them. As each script on the App's token exits, it logs how much of the installation's hourly REST and GraphQL budgets is left, and warns when either is below a quarter; GitHub reports no such figure for the secondary limits. Each event starts a bump run on the same token, so if GitHub still reports a rate limit, `notify` and `bootstrap` wait as long as it asks and retry, up to four times. A search or other read that hits a transient server error (HTTP 502, 503 or 504) is retried the same way, after 5, 10, 20 and 40 seconds; a write is not, because it may already have taken effect.
 
 ### Creating the App
 
@@ -108,4 +108,4 @@ Every repository the bump reaches must be public, or readable with the credentia
 
 ## Testing
 
-`tests/run.sh` builds fixture repositories locally and runs `bump.sh` and `check-base.sh` against them; it needs `elan`, `git`, `jq` and `perl`. `tests/github.sh` runs `notify`, `bootstrap` and `protect` against a fake GitHub API.
+`tests/run.sh` builds fixture repositories locally and runs `bump.sh` and `check-base.sh` against them; it needs `elan`, `git`, `jq` and `perl`. `tests/github.sh` runs `notify`, `bootstrap`, `protect` and `clear-label.sh` against a fake GitHub API, and checks how a changelog's version is read.

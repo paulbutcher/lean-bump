@@ -9,6 +9,7 @@
 set -euo pipefail
 source "$(dirname "$0")/../lib/github.sh"
 source "$(dirname "$0")/../lib/changelog.sh"
+REPORT_RATE_LIMIT=true
 
 : "${ACTION:?}" "${REPO:?}" "${PR:?}" "${HEAD_SHA:?}" "${CONTEXT_DIR:?}" "${GITHUB_TOKEN:?}"
 BRANCH=${BRANCH:-lean-bump}

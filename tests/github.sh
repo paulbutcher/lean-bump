@@ -66,6 +66,22 @@ for r in done new; do fixture "GET/repos/o/$r/pulls?head=o:lean-bump-install&sta
 fixture 'GET/repos/o/pending/pulls?head=o:lean-bump-install&state=open' 200 '[{"number": 1}]'
 fixture GET/repos/o/new 200 '{"default_branch": "main"}'
 fixture GET/repos/o/new/git/ref/heads/main 200 '{"object": {"sha": "abc123"}}'
+# manifest URL INHERITED: a Lake manifest with one git package.
+manifest() { jq -cn --arg u "$1" --argjson i "$2" '{version: "1.1.0", packages: [{type: "git", url: $u, inherited: $i}]}'; }
+# files REPO PATH=MANIFEST...: REPO's default branch holds a README and those manifests.
+files() {
+  local repo=$1 tree='[{"path": "README.md", "type": "blob", "sha": "readme"}]' i=0 m; shift
+  for m in "$@"; do
+    i=$((i + 1))
+    tree=$(jq -c --arg p "${m%%=*}" --arg s "m$i" '. + [{path: $p, type: "blob", sha: $s}]' <<< "$tree")
+    fixture "GET/repos/$repo/git/blobs/m$i" 200 "$(jq -cn --arg c "$(printf '%s' "${m#*=}" | base64)" '{content: $c}')"
+  done
+  fixture "GET/repos/$repo/git/trees/HEAD?recursive=1" 200 "$(jq -cn --argjson t "$tree" '{tree: $t, truncated: false}')"
+}
+# o/new requires o/done from its root project, o/pending only from a test project.
+files o/new "lake-manifest.json=$(manifest https://github.com/o/done.git false)"
+files o/pending "lake-manifest.json=$(manifest https://github.com/o/new true)" \
+  "test/lake-manifest.json=$(manifest https://github.com/O/Done false)"
 
 failures=0
 check() {
@@ -80,8 +96,23 @@ out=$(run env SOURCE=o/done "$root/notify/notify.sh")
 check "notify dispatches to every other Lake package" "$(writes)" \
   "POST repos/o/new/dispatches;POST repos/o/pending/dispatches"
 check "notify reports each dispatch" "$(grep -c '^notified' <<< "$out")" 2
-check "notify finds Lake packages with a single request" "$(grep -c . "$T/api/requests")" 3
+check "notify finds Lake packages with a single search" "$(grep -c '^POST graphql' "$T/api/requests")" 1
 check "notify spaces dispatches a second apart" "$(sleeps)" "1 1"
+
+files o/pending "lake-manifest.json=$(manifest https://github.com/o/done true)" \
+  ".lake/packages/x/lake-manifest.json=$(manifest https://github.com/o/done false)" \
+  "test/lake-manifest.json=$(manifest https://github.com/o/done-extra false)"
+out=$(run env SOURCE=o/done "$root/notify/notify.sh")
+check "notify skips a package that requires the release only indirectly, or not at all" "$(writes);$(grep '^skipping' <<< "$out")" \
+  "POST repos/o/new/dispatches;skipping o/pending: nothing in it requires o/done"
+fixture GET/repos/o/new/git/trees/HEAD?recursive=1 404 '{"message": "Not Found"}'
+fixture GET/repos/o/pending/git/blobs/m3 200 '{"content": "bm90IGpzb24="}'
+out=$(run env SOURCE=o/done "$root/notify/notify.sh")
+check "notify notifies a package it cannot read" "$(writes);$(grep 'anyway' <<< "$out")" \
+  $'POST repos/o/new/dispatches;POST repos/o/pending/dispatches;could not list o/new\'s files (HTTP 404): notifying it anyway\ncould not parse o/pending\'s test/lake-manifest.json: notifying it anyway'
+files o/new "lake-manifest.json=$(manifest https://github.com/o/done.git false)"
+files o/pending "lake-manifest.json=$(manifest https://github.com/o/new true)" \
+  "test/lake-manifest.json=$(manifest https://github.com/O/Done false)"
 
 out=$(run env DRY_RUN=true "$root/bootstrap.sh")
 check "a bootstrap dry run writes nothing" "$(writes)" ""
@@ -213,6 +244,17 @@ fixture "$label_path" 403 '{"message": "Resource not accessible by integration"}
 out=$(run env REPO=o/done PR=5 GITHUB_TOKEN=t "$root/clear-label.sh") && status=0 || status=$?
 check "clear-label only warns when it cannot remove the label" "$status;$out" \
   '0;::warning::could not remove `lean-bump: needs decision` from #5 (HTTP 403): Resource not accessible by integration'
+
+fixture GET/rate_limit 200 \
+  '{"resources": {"core": {"limit": 5000, "remaining": 1000, "reset": 0}, "graphql": {"limit": 5000, "remaining": 4999, "reset": 3600}}}'
+out=$(run env REPO=o/done PR=5 GITHUB_TOKEN=t "$root/clear-label.sh") && status=0 || status=$?
+check "a script on the App's token reports its rate limit as it exits, and warns when it runs low" "$status;$(tail -n2 <<< "$out")" \
+  $'0;rate limit: core 1000/5000 until 1970-01-01T00:00:00Z, graphql 4999/5000 until 1970-01-01T01:00:00Z\n::warning::GitHub rate limit: core has 1000 of 5000 requests left until 1970-01-01T00:00:00Z'
+fixture GET/repos/o/new/contents/.github/workflows/lean-bump.yml 500
+out=$(run "$root/bootstrap.sh") && status=0 || status=$?
+check "the rate limit report keeps a failed run's status" "$status;$(grep -c '^rate limit' <<< "$out")" "1;1"
+installed o/new lean-bump.yml
+rm "$T/api/GET:rate_limit"
 
 source "$root/lib/changelog.sh"
 changelog() { printf '# Changelog\n\n%s\n' "$@" > "$T/CHANGELOG.md"; changelog_version "$T/CHANGELOG.md"; }

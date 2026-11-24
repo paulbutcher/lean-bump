@@ -5,6 +5,7 @@
 set -euo pipefail
 here=$(dirname "$0")
 source "$here/lib/github.sh"
+REPORT_RATE_LIMIT=true
 
 : "${OWNER:?set OWNER to the account to bootstrap}"
 EVENT_TYPE=${EVENT_TYPE:-lean-dependency-released}
